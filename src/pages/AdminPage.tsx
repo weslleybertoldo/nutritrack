@@ -45,7 +45,7 @@ interface UserDetail {
 async function adminFetch(action: string, params?: Record<string, string>) {
   const token = sessionStorage.getItem('admin_token');
   if (!token) throw new Error('Não autenticado');
-  const url = new URL(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-api`);
+  const url = new URL(`https://qyikubuqyhobppvojvpa.supabase.co/functions/v1/admin-api`);
   url.searchParams.set('action', action);
   if (params) Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
   const res = await fetch(url.toString(), {
