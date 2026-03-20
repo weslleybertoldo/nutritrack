@@ -49,7 +49,7 @@ async function adminFetch(action: string, params?: Record<string, string>) {
   url.searchParams.set('action', action);
   if (params) Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
   const res = await fetch(url.toString(), {
-    headers: { 'Content-Type': 'application/json', 'x-admin-token': token },
+    headers: { 'Content-Type': 'application/json', 'x-admin-token': token, 'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF5aWt1YnVxeWhvYnBwdm9qdnBhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM5ODM5NDUsImV4cCI6MjA4OTU1OTk0NX0.YYhbW3KrkXtBDBb4Wpnvfrbl8hzb8-ixet54prpD6_U' },
   });
   const data = await res.json();
   if (data.error) throw new Error(data.error);
@@ -61,7 +61,7 @@ async function adminPost(action: string, body: Record<string, any>) {
   if (!token) throw new Error('Não autenticado');
   const res = await fetch(`https://qyikubuqyhobppvojvpa.supabase.co/functions/v1/admin-api`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-admin-token': token },
+    headers: { 'Content-Type': 'application/json', 'x-admin-token': token, 'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF5aWt1YnVxeWhvYnBwdm9qdnBhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM5ODM5NDUsImV4cCI6MjA4OTU1OTk0NX0.YYhbW3KrkXtBDBb4Wpnvfrbl8hzb8-ixet54prpD6_U' },
     body: JSON.stringify({ action, ...body }),
   });
   const data = await res.json();
