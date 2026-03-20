@@ -69,9 +69,13 @@ export default function LoginPage() {
     e.preventDefault();
     setAdminLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('admin-api', {
-        body: { action: 'login', username: adminUsername, password: adminPassword },
+      const _res = await fetch('https://qyikubuqyhobppvojvpa.supabase.co/functions/v1/admin-api', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'login', username: adminUsername, password: adminPassword }),
       });
+      const data = await _res.json();
+      const error = _res.ok ? null : data;
 
       if (error) {
         toast.error('Erro ao conectar com o servidor');
