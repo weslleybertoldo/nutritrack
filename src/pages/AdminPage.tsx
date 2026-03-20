@@ -45,7 +45,7 @@ interface UserDetail {
 async function adminFetch(action: string, params?: Record<string, string>) {
   const token = sessionStorage.getItem('admin_token');
   if (!token) throw new Error('Não autenticado');
-  const url = new URL(`https://qyikubuqyhobppvojvpa.supabase.co/functions/v1/admin-api`);
+  const url = new URL(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-api`);
   url.searchParams.set('action', action);
   if (params) Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
   const res = await fetch(url.toString(), {
@@ -59,7 +59,7 @@ async function adminFetch(action: string, params?: Record<string, string>) {
 async function adminPost(action: string, body: Record<string, any>) {
   const token = sessionStorage.getItem('admin_token');
   if (!token) throw new Error('Não autenticado');
-  const res = await fetch(`https://qyikubuqyhobppvojvpa.supabase.co/functions/v1/admin-api`, {
+  const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-api`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-admin-token': token },
     body: JSON.stringify({ action, ...body }),
