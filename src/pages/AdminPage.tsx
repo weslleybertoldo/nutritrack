@@ -59,7 +59,7 @@ async function adminFetch(action: string, params?: Record<string, string>) {
 async function adminPost(action: string, body: Record<string, any>) {
   const token = sessionStorage.getItem('admin_token');
   if (!token) throw new Error('Não autenticado');
-  const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-api`, {
+  const res = await fetch(`https://qyikubuqyhobppvojvpa.supabase.co/functions/v1/admin-api`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-admin-token': token },
     body: JSON.stringify({ action, ...body }),
