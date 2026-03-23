@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
-import { lovable } from '@/integrations/lovable';
+import { signInWithGoogle } from '@/lib/capacitorAuth';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
-import { Settings } from 'lucide-react';
+import { Settings, RefreshCw } from 'lucide-react';
+import { CURRENT_VERSION } from '@/components/UpdateChecker';
 
 export default function LoginPage() {
   const [isSignUp, setIsSignUp] = useState(false);
@@ -53,16 +54,19 @@ export default function LoginPage() {
   const handleGoogleLogin = async () => {
     setLoading(true);
     try {
-      const result = await lovable.auth.signInWithOAuth('google', {
-        redirect_uri: window.location.origin,
-      });
-      if (result && 'error' in result && result.error) {
-        throw result.error;
+      const result = await signInWithGoogle();
+      if (result.error) {
+        toast.error(result.error);
       }
     } catch (err: any) {
       toast.error(err.message || 'Erro ao entrar com Google');
+    } finally {
       setLoading(false);
     }
+  };
+
+  const handleCheckUpdate = () => {
+    window.location.reload();
   };
 
   const handleAdminLogin = async (e: React.FormEvent) => {
@@ -160,6 +164,18 @@ export default function LoginPage() {
             {isSignUp ? 'Entrar' : 'Criar conta'}
           </button>
         </p>
+      </div>
+
+      {/* Footer with version and update check */}
+      <div className="absolute bottom-6 left-0 right-0 flex flex-col items-center gap-2">
+        <p className="text-xs text-muted-foreground/50">v{CURRENT_VERSION}</p>
+        <button
+          onClick={handleCheckUpdate}
+          className="flex items-center gap-1 text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+        >
+          <RefreshCw className="h-3 w-3" />
+          Verificar atualizações
+        </button>
       </div>
 
       {/* Admin gear icon */}
