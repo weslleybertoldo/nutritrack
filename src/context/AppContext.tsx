@@ -4,6 +4,7 @@ import { calcularMetaCalorica, calcularMacros, formatDate } from '@/lib/calculat
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/context/AuthContext';
 import { toast } from 'sonner';
+import { setCacheData, getCacheData } from '@/lib/offlineSync';
 
 const defaultProfile: Profile = {
   nome: '',
@@ -84,6 +85,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // ── LOAD PROFILE ─────────────────────────────────────────────────────────
   useEffect(() => {
     if (!user) return;
+    const cacheKey = `nutritrack_profile_${user.id}`;
     const loadProfile = async () => {
       try {
         const { data, error } = await supabase.from('profiles').select('*').eq('user_id', user.id).single();
@@ -125,10 +127,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
             admin_locked: (data as any).admin_locked ?? true,
             blocked: (data as any).blocked ?? false,
           };
+          setCacheData(cacheKey, profileData);
           setState(s => ({ ...s, profile: profileData, profileLoaded: true }));
         }
       } catch (err: any) {
         console.error('Erro ao carregar perfil:', err?.message);
+        // Tenta carregar do cache offline
+        const cached = getCacheData<Profile>(cacheKey);
+        if (cached) {
+          setState(s => ({ ...s, profile: cached, profileLoaded: true }));
+        }
       }
     };
     loadProfile();
@@ -138,6 +146,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // CORREÇÃO: sem .limit() a tabela foods global pode crescer indefinidamente
   // Carrega os 200 primeiros por nome; busca adicional é feita via searchFoods
   const refreshFoods = useCallback(async () => {
+    const cacheKey = `nutritrack_foods_${user?.id || 'global'}`;
     try {
       const { data, error } = await supabase
         .from('foods')
@@ -145,11 +154,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
         .order('nome')
         .limit(200); // Limite para evitar carregar tabela inteira
       if (error) throw error;
-      if (data) setState(s => ({ ...s, foods: data as unknown as Food[] }));
+      if (data) {
+        const foods = data as unknown as Food[];
+        setCacheData(cacheKey, foods);
+        setState(s => ({ ...s, foods }));
+      }
     } catch (err: any) {
       console.error('Erro ao carregar alimentos:', err?.message);
+      const cached = getCacheData<Food[]>(cacheKey);
+      if (cached) setState(s => ({ ...s, foods: cached }));
     }
-  }, []);
+  }, [user]);
 
   useEffect(() => { if (user) refreshFoods(); }, [user, refreshFoods]);
 
@@ -158,6 +173,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // setState dentro do useEffect só atualiza state.meals, não selectedDate
   useEffect(() => {
     if (!user) return;
+    const cacheKey = `nutritrack_meals_${user.id}_${state.selectedDate}`;
     const loadMeals = async () => {
       try {
         const { data: mealsData, error } = await supabase
@@ -178,13 +194,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
             items: (itemsData || []).filter(i => i.meal_id === m.id)
               .map(i => ({ ...i, food: i.food as unknown as Food })) as MealItem[],
           }));
+          setCacheData(cacheKey, mealsWithItems);
           setState(s => ({ ...s, meals: mealsWithItems }));
         } else {
+          setCacheData(cacheKey, []);
           setState(s => ({ ...s, meals: [] }));
         }
       } catch (err: any) {
         console.error('Erro ao carregar refeições:', err?.message);
-        setState(s => ({ ...s, meals: [] }));
+        const cached = getCacheData<Meal[]>(cacheKey);
+        if (cached) {
+          setState(s => ({ ...s, meals: cached }));
+        } else {
+          setState(s => ({ ...s, meals: [] }));
+        }
       }
     };
     loadMeals();
@@ -193,23 +216,46 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // ── FAVORITES ─────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!user) return;
+    const cacheKey = `nutritrack_favorites_${user.id}`;
     supabase.from('favorites').select('food_id').eq('user_id', user.id).then(({ data, error }) => {
-      if (error) { console.error('Erro ao carregar favoritos:', error.message); return; }
-      if (data) setState(s => ({ ...s, favorites: data.map(f => f.food_id) }));
+      if (error) {
+        console.error('Erro ao carregar favoritos:', error.message);
+        const cached = getCacheData<string[]>(cacheKey);
+        if (cached) setState(s => ({ ...s, favorites: cached }));
+        return;
+      }
+      if (data) {
+        const favIds = data.map(f => f.food_id);
+        setCacheData(cacheKey, favIds);
+        setState(s => ({ ...s, favorites: favIds }));
+      }
+    }).catch(() => {
+      const cached = getCacheData<string[]>(cacheKey);
+      if (cached) setState(s => ({ ...s, favorites: cached }));
     });
   }, [user]);
 
   // ── RECENT FOODS ──────────────────────────────────────────────────────────
   useEffect(() => {
     if (!user) return;
+    const cacheKey = `nutritrack_recent_foods_${user.id}`;
     supabase.from('recent_foods').select('food_id, quantidade').eq('user_id', user.id)
       .order('usado_em', { ascending: false }).limit(20).then(({ data, error }) => {
-        if (error) { console.error('Erro ao carregar recentes:', error.message); return; }
-        if (data) setState(s => ({
-          ...s,
-          recentFoods: data.map(f => f.food_id),
-          recentFoodsWithQty: data.map(f => ({ food_id: f.food_id, quantidade: (f as any).quantidade ?? 100 })),
-        }));
+        if (error) {
+          console.error('Erro ao carregar recentes:', error.message);
+          const cached = getCacheData<{ recentFoods: string[]; recentFoodsWithQty: RecentFoodWithQty[] }>(cacheKey);
+          if (cached) setState(s => ({ ...s, ...cached }));
+          return;
+        }
+        if (data) {
+          const recentFoods = data.map(f => f.food_id);
+          const recentFoodsWithQty = data.map(f => ({ food_id: f.food_id, quantidade: (f as any).quantidade ?? 100 }));
+          setCacheData(cacheKey, { recentFoods, recentFoodsWithQty });
+          setState(s => ({ ...s, recentFoods, recentFoodsWithQty }));
+        }
+      }).catch(() => {
+        const cached = getCacheData<{ recentFoods: string[]; recentFoodsWithQty: RecentFoodWithQty[] }>(cacheKey);
+        if (cached) setState(s => ({ ...s, ...cached }));
       });
   }, [user]);
 
@@ -417,6 +463,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // ── RECIPES ───────────────────────────────────────────────────────────────
   const loadRecipes = useCallback(async () => {
     if (!user) return;
+    const cacheKey = `nutritrack_recipes_${user.id}`;
     try {
       const { data, error } = await supabase
         .from('recipes')
@@ -431,10 +478,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
             ...i, food: i.food as unknown as Food,
           })) as RecipeItem[],
         }));
+        setCacheData(cacheKey, recipes);
         setState(s => ({ ...s, recipes }));
       }
     } catch (err: any) {
-      toast.error('Erro ao carregar receitas');
+      console.error('Erro ao carregar receitas:', err?.message);
+      const cached = getCacheData<Recipe[]>(cacheKey);
+      if (cached) {
+        setState(s => ({ ...s, recipes: cached }));
+      } else {
+        toast.error('Erro ao carregar receitas');
+      }
     }
   }, [user]);
 

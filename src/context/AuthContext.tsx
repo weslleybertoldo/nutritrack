@@ -2,6 +2,8 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { supabase } from '@/integrations/supabase/client';
 import { Session, User } from '@supabase/supabase-js';
 
+const SESSION_KEY = 'nutritrack_cached_session';
+
 interface AuthContextValue {
   session: Session | null;
   user: User | null;
@@ -11,25 +13,60 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+function getCachedSession(): Session | null {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as Session;
+  } catch {
+    return null;
+  }
+}
+
+function saveCachedSession(session: Session | null) {
+  try {
+    if (session) {
+      localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+    } else {
+      localStorage.removeItem(SESSION_KEY);
+    }
+  } catch {}
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState(true);
+  // Carrega sessão do cache primeiro (funciona offline)
+  const cached = getCachedSession();
+  const [session, setSession] = useState<Session | null>(cached);
+  const [loading, setLoading] = useState(!cached); // Se já tem cache, não bloqueia
 
   useEffect(() => {
+    // Listener para mudanças de auth
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
+      saveCachedSession(session);
       setLoading(false);
     });
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
+    // Se online, tenta refresh/getSession para validar
+    if (navigator.onLine) {
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        setSession(session);
+        saveCachedSession(session);
+        setLoading(false);
+      }).catch(() => {
+        // Falha de rede — mantém sessão em cache
+        setLoading(false);
+      });
+    } else {
+      // Offline — usa sessão do cache, não bloqueia
       setLoading(false);
-    });
+    }
 
     return () => subscription.unsubscribe();
   }, []);
 
   const signOut = async () => {
+    saveCachedSession(null);
     await supabase.auth.signOut();
   };
 

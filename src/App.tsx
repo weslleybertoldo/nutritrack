@@ -14,6 +14,9 @@ import LoginPage from "./pages/LoginPage";
 import AdminPage from "./pages/AdminPage";
 import InstallBanner from "./components/InstallBanner";
 import NotFound from "./pages/NotFound";
+import { setupDeepLinkListener } from "@/lib/capacitorAuth";
+
+setupDeepLinkListener();
 
 const queryClient = new QueryClient();
 
