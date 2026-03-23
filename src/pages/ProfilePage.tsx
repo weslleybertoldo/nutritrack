@@ -1,13 +1,45 @@
-import React from 'react';
+import React, { useState } from 'react';
 import AppLayout from '@/components/AppLayout';
 import { useApp } from '@/context/AppContext';
 import { calcularIdade, calcularPercentualGordura3Dobras, calcularComposicaoCorporal } from '@/lib/calculations';
 import { Sexo } from '@/types';
 import { Button } from '@/components/ui/button';
+import { Settings, RefreshCw, Check, Download, X } from 'lucide-react';
+import UpdateChecker, { CURRENT_VERSION } from '@/components/UpdateChecker';
 
 export default function ProfilePage() {
   const { profile, setProfile } = useApp();
   const isLocked = profile.admin_locked === true;
+  const [showSettings, setShowSettings] = useState(false);
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [updateResult, setUpdateResult] = useState<null | { hasUpdate: boolean; url?: string; version?: string }>(null);
+
+  const handleCheckUpdate = async () => {
+    setCheckingUpdate(true);
+    setUpdateResult(null);
+    try {
+      const res = await fetch("https://api.github.com/repos/weslleybertoldo/nutritrack/releases/latest", { cache: "no-store" });
+      if (!res.ok) throw new Error();
+      const release = await res.json();
+      const remoteVersion = (release.tag_name || "").replace(/^v/, "");
+      const remote = remoteVersion.split(".").map(Number);
+      const local = CURRENT_VERSION.split(".").map(Number);
+      const isNewer =
+        remote[0] > local[0] ||
+        (remote[0] === local[0] && remote[1] > local[1]) ||
+        (remote[0] === local[0] && remote[1] === local[1] && remote[2] > local[2]);
+      if (isNewer) {
+        const apkAsset = (release.assets || []).find((a: any) => a.name.endsWith(".apk"));
+        setUpdateResult({ hasUpdate: true, url: apkAsset?.browser_download_url || release.html_url, version: remoteVersion });
+      } else {
+        setUpdateResult({ hasUpdate: false });
+      }
+    } catch {
+      setUpdateResult({ hasUpdate: false });
+    } finally {
+      setCheckingUpdate(false);
+    }
+  };
 
   const inputClass = "w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm font-body focus:outline-none focus:ring-2 focus:ring-ring";
   const readOnlyClass = "w-full rounded-lg border border-input bg-secondary px-3 py-2.5 text-sm font-body text-muted-foreground";
@@ -224,6 +256,71 @@ export default function ProfilePage() {
             ))}
           </div>
         </section>
+
+        {/* Rodapé com versão e atualizações */}
+        <footer className="pt-6 pb-4 text-center space-y-2 relative">
+          <p className="text-xs text-muted-foreground italic">By Weslley Bertoldo</p>
+          <p className="text-[10px] text-muted-foreground/50">v{CURRENT_VERSION}</p>
+
+          <button
+            type="button"
+            onClick={() => { setShowSettings(true); setUpdateResult(null); }}
+            className="absolute bottom-4 right-0 p-2 text-muted-foreground/30 hover:text-muted-foreground transition-colors"
+          >
+            <Settings size={16} />
+          </button>
+        </footer>
+
+        {/* Modal de configurações */}
+        {showSettings && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowSettings(false)}>
+            <div className="bg-card border border-border rounded-xl p-6 mx-4 max-w-sm w-full space-y-4" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between">
+                <h3 className="font-heading text-sm font-semibold uppercase tracking-wider">Configurações</h3>
+                <button type="button" onClick={() => setShowSettings(false)} className="text-muted-foreground hover:text-foreground transition-colors">
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="text-center space-y-3">
+                <p className="text-[10px] text-muted-foreground/50">Versão atual: v{CURRENT_VERSION}</p>
+
+                <button
+                  type="button"
+                  onClick={handleCheckUpdate}
+                  disabled={checkingUpdate}
+                  className="flex items-center justify-center gap-2 mx-auto px-4 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:text-primary border border-border rounded-lg transition-colors"
+                >
+                  <RefreshCw size={12} className={checkingUpdate ? "animate-spin" : ""} />
+                  Verificar atualizações
+                </button>
+
+                {updateResult && (
+                  <div className="mt-2">
+                    {updateResult.hasUpdate ? (
+                      <a
+                        href={updateResult.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-xs font-semibold uppercase tracking-wider hover:bg-primary/90 transition-colors"
+                      >
+                        <Download size={12} />
+                        Baixar v{updateResult.version}
+                      </a>
+                    ) : (
+                      <p className="text-xs text-green-500 flex items-center justify-center gap-1">
+                        <Check size={12} />
+                        Você está usando a versão mais recente
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        <UpdateChecker />
       </div>
     </AppLayout>
   );
