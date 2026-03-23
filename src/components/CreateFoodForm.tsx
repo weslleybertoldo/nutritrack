@@ -65,14 +65,29 @@ export default function CreateFoodForm({ onCreated, initialBarcode, onExistingFo
     if (!file) return;
     setExtracting(true);
     try {
+      // Comprime a imagem para no máximo 800px e qualidade 0.6
+      // Fotos de celular chegam a 3MB+ — Gemini rejeita payloads grandes
       const base64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-          const result = reader.result as string;
-          resolve(result.split(',')[1]);
+        const img = new Image();
+        const url = URL.createObjectURL(file);
+        img.onload = () => {
+          URL.revokeObjectURL(url);
+          const MAX = 800;
+          let { width, height } = img;
+          if (width > MAX || height > MAX) {
+            if (width > height) { height = Math.round(height * MAX / width); width = MAX; }
+            else { width = Math.round(width * MAX / height); height = MAX; }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d')!;
+          ctx.drawImage(img, 0, 0, width, height);
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
+          resolve(dataUrl.split(',')[1]);
         };
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
+        img.onerror = reject;
+        img.src = url;
       });
 
       const { data, error } = await supabase.functions.invoke('extract-nutrition', {
