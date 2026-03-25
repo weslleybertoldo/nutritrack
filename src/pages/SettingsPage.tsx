@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { getPwaPrompt, clearPwaPrompt, subscribePwaPrompt, isStandalone } from '@/lib/pwa';
+import { hasPendingData } from '@/lib/offlineSync';
 
 export default function SettingsPage() {
   const { tema, setTema } = useTheme();
@@ -80,6 +81,12 @@ export default function SettingsPage() {
   ];
 
   const handleSignOut = async () => {
+    if (hasPendingData()) {
+      const confirmed = window.confirm(
+        "Você tem dados não sincronizados. Sair agora pode causar perda de dados. Deseja continuar?"
+      );
+      if (!confirmed) return;
+    }
     await signOut();
     navigate('/login');
   };
