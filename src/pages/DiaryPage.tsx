@@ -4,7 +4,7 @@ import { useApp } from '@/context/AppContext';
 import { useAuth } from '@/context/AuthContext';
 import { Meal, MealItem, TipoRefeicao, TIPO_REFEICAO_LABELS, REFEICOES_PADRAO } from '@/types';
 import { calcularComposicaoCorporal, calcularPercentualGordura3Dobras, calcularIdade, displayDate, formatDate } from '@/lib/calculations';
-import { Plus, Trash2, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, ChevronRight as ChevronRightIcon, GripVertical, BarChart3 } from 'lucide-react';
+import { Plus, Trash2, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, ChevronRight as ChevronRightIcon, GripVertical, BarChart3, RefreshCw, Check, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import AppLayout from '@/components/AppLayout';
@@ -15,6 +15,7 @@ import WeekBar from '@/components/WeekBar';
 import HydrationCard from '@/components/HydrationCard';
 import HabitosCard from '@/components/HabitosCard';
 import { supabase } from '@/integrations/supabase/client';
+import UpdateChecker, { CURRENT_VERSION } from '@/components/UpdateChecker';
 
 interface MealConfigItem { id: string; tipo: string; nome_personalizado?: string; ordem: number; }
 
@@ -33,6 +34,35 @@ export default function DiaryPage() {
   const [expandedMeals, setExpandedMeals] = useState<Record<string, boolean>>({});
   const [addingMealType, setAddingMealType] = useState(false);
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [updateResult, setUpdateResult] = useState<null | { hasUpdate: boolean; url?: string; version?: string }>(null);
+
+  const handleCheckUpdate = async () => {
+    setCheckingUpdate(true);
+    setUpdateResult(null);
+    try {
+      const res = await fetch("https://api.github.com/repos/weslleybertoldo/nutritrack/releases/latest", { cache: "no-store" });
+      if (!res.ok) throw new Error();
+      const release = await res.json();
+      const remoteVersion = (release.tag_name || "").replace(/^v/, "");
+      const remote = remoteVersion.split(".").map(Number);
+      const local = CURRENT_VERSION.split(".").map(Number);
+      const isNewer =
+        remote[0] > local[0] ||
+        (remote[0] === local[0] && remote[1] > local[1]) ||
+        (remote[0] === local[0] && remote[1] === local[1] && remote[2] > local[2]);
+      if (isNewer) {
+        const apkAsset = (release.assets || []).find((a: any) => a.name.endsWith(".apk"));
+        setUpdateResult({ hasUpdate: true, url: apkAsset?.browser_download_url || release.html_url, version: remoteVersion });
+      } else {
+        setUpdateResult({ hasUpdate: false });
+      }
+    } catch {
+      setUpdateResult({ hasUpdate: false });
+    } finally {
+      setCheckingUpdate(false);
+    }
+  };
 
   // ── Configuração persistente de refeições do usuário ─────────────────────
   const [mealConfig, setMealConfig] = useState<MealConfigItem[]>([]);
@@ -394,6 +424,43 @@ export default function DiaryPage() {
           </section>
         </>
       )}
+
+      {/* Rodapé com versão e atualizações */}
+      <footer className="pt-8 pb-4 text-center space-y-2">
+        <p className="text-xs text-muted-foreground italic">By Weslley Bertoldo</p>
+        <p className="text-[10px] text-muted-foreground/50">v{CURRENT_VERSION}</p>
+        <button
+          type="button"
+          onClick={handleCheckUpdate}
+          disabled={checkingUpdate}
+          className="flex items-center justify-center gap-1 mx-auto text-[10px] text-muted-foreground/50 hover:text-primary transition-colors"
+        >
+          <RefreshCw size={10} className={checkingUpdate ? "animate-spin" : ""} />
+          Verificar atualizações
+        </button>
+        {updateResult && (
+          <div className="mt-1">
+            {updateResult.hasUpdate ? (
+              <a
+                href={updateResult.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-[10px] font-semibold uppercase tracking-wider hover:bg-primary/90 transition-colors"
+              >
+                <Download size={10} />
+                Baixar v{updateResult.version}
+              </a>
+            ) : (
+              <p className="text-[10px] text-green-500 flex items-center justify-center gap-1">
+                <Check size={10} />
+                Versão mais recente
+              </p>
+            )}
+          </div>
+        )}
+      </footer>
+
+      <UpdateChecker />
 
       {/* Modals */}
       {addFoodMealId && (
