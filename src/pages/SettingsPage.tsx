@@ -56,10 +56,17 @@ export default function SettingsPage() {
   useEffect(() => {
     setInstalled(isStandalone());
     setHasPrompt(!!getPwaPrompt());
-    return subscribePwaPrompt(() => {
+    const unsubscribe = subscribePwaPrompt(() => {
       setHasPrompt(!!getPwaPrompt());
       setInstalled(isStandalone());
     });
+    return () => {
+      unsubscribe();
+      if (copiedTimerRef.current) {
+        clearTimeout(copiedTimerRef.current);
+        copiedTimerRef.current = null;
+      }
+    };
   }, []);
 
   const handleInstall = async () => {

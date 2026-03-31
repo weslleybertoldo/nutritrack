@@ -2,7 +2,8 @@ import { Profile, Sexo } from '@/types';
 
 export function calcularIdade(dataNascimento: string): number {
   const hoje = new Date();
-  const nasc = new Date(dataNascimento);
+  const [year, month, day] = dataNascimento.split('-').map(Number);
+  const nasc = new Date(year, month - 1, day);
   let idade = hoje.getFullYear() - nasc.getFullYear();
   const m = hoje.getMonth() - nasc.getMonth();
   if (m < 0 || (m === 0 && hoje.getDate() < nasc.getDate())) idade--;

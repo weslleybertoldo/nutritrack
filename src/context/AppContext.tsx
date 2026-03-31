@@ -4,7 +4,7 @@ import { calcularMetaCalorica, calcularMacros, formatDate } from '@/lib/calculat
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/context/AuthContext';
 import { toast } from 'sonner';
-import { setCacheData, getCacheData } from '@/lib/offlineSync';
+import { setCacheData, getCacheData, addPendingOperation } from '@/lib/offlineSync';
 
 const defaultProfile: Profile = {
   nome: '',
@@ -81,6 +81,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     profileLoaded: false,
     recipes: [],
   });
+
+  // ── MIDNIGHT DATE CHECK ──────────────────────────────────────────────────
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const hoje = formatDate(new Date());
+      if (hoje !== state.selectedDate) {
+        setState(s => ({ ...s, selectedDate: hoje }));
+      }
+    }, 60000);
+    return () => clearInterval(interval);
+  }, [state.selectedDate]);
 
   // ── LOAD PROFILE ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -261,16 +272,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // ── SET PROFILE ───────────────────────────────────────────────────────────
   const setProfile = useCallback((p: Partial<Profile>) => {
+    // Atualização otimista primeiro
+    let newProfile: Profile | null = null;
     setState(s => {
-      const newProfile = { ...s.profile, ...p };
-      if (user) {
-        const { id, user_id, created_at, updated_at, ...profileData } = newProfile as any;
-        supabase.from('profiles').update(profileData).eq('user_id', user.id).then(({ error }) => {
-          if (error) toast.error('Erro ao salvar perfil');
-        });
-      }
+      newProfile = { ...s.profile, ...p };
       return { ...s, profile: newProfile };
     });
+    // Supabase fora do setState
+    if (user && newProfile) {
+      const { id, user_id, created_at, updated_at, ...profileData } = newProfile as any;
+      supabase.from('profiles').update(profileData).eq('user_id', user.id).then(({ error }) => {
+        if (error) {
+          toast.error('Erro ao salvar perfil');
+          addPendingOperation('profiles', 'update', profileData, undefined, { user_id: user.id });
+        }
+      }).catch(() => {
+        addPendingOperation('profiles', 'update', profileData, undefined, { user_id: user.id });
+      });
+    }
   }, [user]);
 
   const setSelectedDate = useCallback((d: string) => { setState(s => ({ ...s, selectedDate: d })); }, []);
@@ -302,31 +321,45 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // ── MEALS ─────────────────────────────────────────────────────────────────
   const addMeal = useCallback(async (m: Omit<Meal, 'id' | 'user_id'>): Promise<Meal> => {
+    const tempId = crypto.randomUUID();
+    const mealPayload = { ...m, user_id: user!.id };
+    // Atualização otimista
+    const optimisticMeal: Meal = { ...mealPayload, id: tempId, items: [] } as Meal;
+    setState(s => ({ ...s, meals: [...s.meals, optimisticMeal] }));
     try {
-      const { data, error } = await supabase.from('meals').insert({ ...m, user_id: user!.id }).select().single();
+      const { data, error } = await supabase.from('meals').insert(mealPayload).select().single();
       if (error) throw error;
       const meal: Meal = { ...data, tipo: data.tipo as any, items: [] };
-      setState(s => ({ ...s, meals: [...s.meals, meal] }));
+      // Substitui o otimista pelo real
+      setState(s => ({ ...s, meals: s.meals.map(existing => existing.id === tempId ? meal : existing) }));
       return meal;
     } catch (err: any) {
-      toast.error('Erro ao criar refeição');
-      throw err;
+      // Enfileira para sync offline
+      addPendingOperation('meals', 'upsert', { ...mealPayload, id: tempId }, 'id');
+      return optimisticMeal;
     }
   }, [user]);
 
   const addMealItem = useCallback(async (mealId: string, item: Omit<MealItem, 'id' | 'meal_id'>) => {
     const { food, ...itemData } = item as any;
+    const tempId = crypto.randomUUID();
+    const insertPayload = { ...itemData, meal_id: mealId };
+    // Atualização otimista
+    const optimisticItem: MealItem = { ...insertPayload, id: tempId, food } as MealItem;
+    setState(s => ({ ...s, meals: s.meals.map(m => m.id === mealId ? { ...m, items: [...(m.items || []), optimisticItem] } : m) }));
     try {
       const { data, error } = await supabase
         .from('meal_items')
-        .insert({ ...itemData, meal_id: mealId })
+        .insert(insertPayload)
         .select('*, food:foods(*)')
         .single();
       if (error) throw error;
       const newItem: MealItem = { ...data, food: data.food as unknown as Food } as MealItem;
-      setState(s => ({ ...s, meals: s.meals.map(m => m.id === mealId ? { ...m, items: [...(m.items || []), newItem] } : m) }));
+      // Substitui otimista pelo real
+      setState(s => ({ ...s, meals: s.meals.map(m => m.id === mealId ? { ...m, items: (m.items || []).map(i => i.id === tempId ? newItem : i) } : m) }));
     } catch (err: any) {
-      toast.error('Erro ao adicionar item');
+      // Enfileira para sync offline
+      addPendingOperation('meal_items', 'upsert', { ...insertPayload, id: tempId }, 'id');
     }
   }, []);
 
@@ -334,51 +367,51 @@ export function AppProvider({ children }: { children: ReactNode }) {
     mealId: string, itemId: string,
     updates: { quantidade: number; calorias_calculadas: number; proteina: number; carbo: number; gordura: number }
   ) => {
+    // Atualização otimista
+    setState(s => ({
+      ...s, meals: s.meals.map(m => m.id === mealId ? {
+        ...m, items: (m.items || []).map(i => i.id === itemId ? { ...i, ...updates } : i)
+      } : m)
+    }));
     try {
-      // CORREÇÃO de segurança: garante que o item pertence ao user via meal_id
       const { error } = await supabase
         .from('meal_items')
         .update(updates)
         .eq('id', itemId)
-        .eq('meal_id', mealId); // segunda camada além do RLS
+        .eq('meal_id', mealId);
       if (error) throw error;
-      setState(s => ({
-        ...s, meals: s.meals.map(m => m.id === mealId ? {
-          ...m, items: (m.items || []).map(i => i.id === itemId ? { ...i, ...updates } : i)
-        } : m)
-      }));
     } catch (err: any) {
-      toast.error('Erro ao atualizar item');
+      addPendingOperation('meal_items', 'update', updates, undefined, { id: itemId, meal_id: mealId });
     }
   }, []);
 
   const removeMealItem = useCallback(async (mealId: string, itemId: string) => {
+    // Atualização otimista
+    setState(s => ({ ...s, meals: s.meals.map(m => m.id === mealId ? { ...m, items: (m.items || []).filter(i => i.id !== itemId) } : m) }));
     try {
-      // CORREÇÃO de segurança: garante que o item pertence ao user via meal_id
       const { error } = await supabase
         .from('meal_items')
         .delete()
         .eq('id', itemId)
-        .eq('meal_id', mealId); // segunda camada além do RLS
+        .eq('meal_id', mealId);
       if (error) throw error;
-      setState(s => ({ ...s, meals: s.meals.map(m => m.id === mealId ? { ...m, items: (m.items || []).filter(i => i.id !== itemId) } : m) }));
     } catch (err: any) {
-      toast.error('Erro ao remover item');
+      addPendingOperation('meal_items', 'delete', undefined, undefined, { id: itemId, meal_id: mealId });
     }
   }, []);
 
   const removeMeal = useCallback(async (mealId: string) => {
+    // Atualização otimista
+    setState(s => ({ ...s, meals: s.meals.filter(m => m.id !== mealId) }));
     try {
-      // CORREÇÃO de segurança: garante que a refeição pertence ao user
       const { error } = await supabase
         .from('meals')
         .delete()
         .eq('id', mealId)
-        .eq('user_id', user!.id); // segunda camada além do RLS
+        .eq('user_id', user!.id);
       if (error) throw error;
-      setState(s => ({ ...s, meals: s.meals.filter(m => m.id !== mealId) }));
     } catch (err: any) {
-      toast.error('Erro ao remover refeição');
+      addPendingOperation('meals', 'delete', undefined, undefined, { id: mealId, user_id: user!.id });
     }
   }, [user]);
 
@@ -387,50 +420,73 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Agora lê dentro do setState para sempre ter o valor atual
   const toggleFavorite = useCallback(async (foodId: string) => {
     if (!user) return;
+    // Lê estado atual e aplica otimista
+    let wasFav = false;
     setState(s => {
-      const isFav = s.favorites.includes(foodId);
-      // Dispara operação no Supabase em background
-      if (isFav) {
-        supabase.from('favorites').delete().eq('user_id', user.id).eq('food_id', foodId)
-          .then(({ error }) => { if (error) toast.error('Erro ao remover favorito'); });
-      } else {
-        supabase.from('favorites').insert({ user_id: user.id, food_id: foodId })
-          .then(({ error }) => { if (error) toast.error('Erro ao adicionar favorito'); });
-      }
+      wasFav = s.favorites.includes(foodId);
       return {
         ...s,
-        favorites: isFav
+        favorites: wasFav
           ? s.favorites.filter(f => f !== foodId)
           : [...s.favorites, foodId],
       };
     });
-  }, [user]); // CORREÇÃO: removido state.favorites das deps — lido dentro de setState
+    // Supabase fora do setState
+    try {
+      if (wasFav) {
+        const { error } = await supabase.from('favorites').delete().eq('user_id', user.id).eq('food_id', foodId);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from('favorites').insert({ user_id: user.id, food_id: foodId });
+        if (error) throw error;
+      }
+    } catch {
+      // Rollback otimista
+      setState(s => ({
+        ...s,
+        favorites: wasFav
+          ? [...s.favorites, foodId]
+          : s.favorites.filter(f => f !== foodId),
+      }));
+      if (wasFav) {
+        addPendingOperation('favorites', 'delete', undefined, undefined, { user_id: user.id, food_id: foodId });
+      } else {
+        addPendingOperation('favorites', 'insert', { user_id: user.id, food_id: foodId });
+      }
+    }
+  }, [user]);
 
   // ── RECENT FOODS ──────────────────────────────────────────────────────────
   const addRecentFood = useCallback(async (foodId: string, quantidade: number = 100) => {
     if (!user) return;
     try {
-      const { data: existing } = await supabase
+      const { data: existing, error: existingError } = await supabase
         .from('recent_foods').select('id').eq('user_id', user.id).eq('food_id', foodId).maybeSingle();
+      if (existingError) throw existingError;
 
       if (existing) {
-        await supabase.from('recent_foods').update({ usado_em: new Date().toISOString(), quantidade } as any).eq('id', existing.id);
+        const { error: updateError } = await supabase.from('recent_foods').update({ usado_em: new Date().toISOString(), quantidade } as any).eq('id', existing.id);
+        if (updateError) throw updateError;
       } else {
-        await supabase.from('recent_foods').insert({ user_id: user.id, food_id: foodId, quantidade } as any);
+        const { error: insertError } = await supabase.from('recent_foods').insert({ user_id: user.id, food_id: foodId, quantidade } as any);
+        if (insertError) throw insertError;
       }
 
       // Cleanup: mantém apenas os 20 mais recentes
-      const { data: allRecents } = await supabase
+      const { data: allRecents, error: recentsError } = await supabase
         .from('recent_foods').select('id').eq('user_id', user.id).order('usado_em', { ascending: false });
+      if (recentsError) throw recentsError;
       if (allRecents && allRecents.length > 20) {
         const idsToDelete = allRecents.slice(20).map(r => r.id);
-        await supabase.from('recent_foods').delete().in('id', idsToDelete);
+        const { error: deleteError } = await supabase.from('recent_foods').delete().in('id', idsToDelete);
+        if (deleteError) throw deleteError;
       }
 
       // Atualiza lista de recentes no estado
-      const { data: freshRecents } = await supabase
+      const { data: freshRecents, error: freshError } = await supabase
         .from('recent_foods').select('food_id, quantidade').eq('user_id', user.id)
         .order('usado_em', { ascending: false }).limit(20);
+      if (freshError) throw freshError;
       if (freshRecents) {
         setState(s => ({
           ...s,

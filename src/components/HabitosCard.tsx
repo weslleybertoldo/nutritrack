@@ -27,23 +27,25 @@ export default function HabitosCard({ selectedDate }: HabitosCardProps) {
 
   const loadHabitos = useCallback(async () => {
     if (!user) return;
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('habitos')
       .select('id, nome, ordem')
       .eq('user_id', user.id)
       .eq('ativo', true)
       .order('ordem');
+    if (error) { console.warn('Erro ao carregar hábitos:', error.message); toast.error('Erro ao carregar hábitos'); setLoading(false); return; }
     if (data) setHabitos(data as Habito[]);
     setLoading(false);
   }, [user]);
 
   const loadConcluidos = useCallback(async () => {
     if (!user) return;
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('habitos_registro')
       .select('habito_id')
       .eq('user_id', user.id)
       .eq('data', selectedDate);
+    if (error) { console.warn('Erro ao carregar concluídos:', error.message); return; }
     if (data) setConcluidos(new Set(data.map(r => r.habito_id)));
   }, [user, selectedDate]);
 
@@ -57,7 +59,10 @@ export default function HabitosCard({ selectedDate }: HabitosCardProps) {
         .insert({ user_id: user.id, nome: 'Creatina', ordem: 0, ativo: true })
         .select('id, nome, ordem')
         .single()
-        .then(({ data }) => { if (data) setHabitos([data as Habito]); });
+        .then(({ data, error }) => {
+          if (error) { console.warn('Erro ao criar hábito padrão:', error.message); return; }
+          if (data) setHabitos([data as Habito]);
+        });
     }
   }, [loading, habitos.length, user]);
 
@@ -65,15 +70,17 @@ export default function HabitosCard({ selectedDate }: HabitosCardProps) {
     if (!user) return;
     const jaConcluido = concluidos.has(habitoId);
     if (jaConcluido) {
-      await supabase.from('habitos_registro')
+      const { error } = await supabase.from('habitos_registro')
         .delete()
         .eq('user_id', user.id)
         .eq('habito_id', habitoId)
         .eq('data', selectedDate);
+      if (error) { console.warn('Erro ao desmarcar hábito:', error.message); toast.error('Erro ao desmarcar hábito'); return; }
       setConcluidos(prev => { const s = new Set(prev); s.delete(habitoId); return s; });
     } else {
-      await supabase.from('habitos_registro')
+      const { error } = await supabase.from('habitos_registro')
         .insert({ user_id: user.id, habito_id: habitoId, data: selectedDate });
+      if (error) { console.warn('Erro ao marcar hábito:', error.message); toast.error('Erro ao marcar hábito'); return; }
       setConcluidos(prev => new Set([...prev, habitoId]));
     }
   };
@@ -81,9 +88,10 @@ export default function HabitosCard({ selectedDate }: HabitosCardProps) {
   const handleAddHabito = async () => {
     if (!novoNome.trim() || !user) return;
     const maxOrdem = habitos.length > 0 ? Math.max(...habitos.map(h => h.ordem)) + 1 : 0;
-    const { data } = await supabase.from('habitos')
+    const { data, error } = await supabase.from('habitos')
       .insert({ user_id: user.id, nome: novoNome.trim(), ordem: maxOrdem, ativo: true })
       .select('id, nome, ordem').single();
+    if (error) { console.warn('Erro ao adicionar hábito:', error.message); toast.error('Erro ao adicionar hábito'); return; }
     if (data) {
       setHabitos(prev => [...prev, data as Habito]);
       setNovoNome('');
@@ -93,13 +101,15 @@ export default function HabitosCard({ selectedDate }: HabitosCardProps) {
 
   const handleRenomear = async (id: string) => {
     if (!editandoNome.trim()) return;
-    await supabase.from('habitos').update({ nome: editandoNome.trim() }).eq('id', id);
+    const { error } = await supabase.from('habitos').update({ nome: editandoNome.trim() }).eq('id', id);
+    if (error) { console.warn('Erro ao renomear hábito:', error.message); toast.error('Erro ao renomear hábito'); return; }
     setHabitos(prev => prev.map(h => h.id === id ? { ...h, nome: editandoNome.trim() } : h));
     setEditandoId(null);
   };
 
   const handleExcluir = async (id: string) => {
-    await supabase.from('habitos').update({ ativo: false }).eq('id', id);
+    const { error } = await supabase.from('habitos').update({ ativo: false }).eq('id', id);
+    if (error) { console.warn('Erro ao excluir hábito:', error.message); toast.error('Erro ao excluir hábito'); return; }
     setHabitos(prev => prev.filter(h => h.id !== id));
     setConcluidos(prev => { const s = new Set(prev); s.delete(id); return s; });
   };

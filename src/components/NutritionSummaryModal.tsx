@@ -50,10 +50,12 @@ export default function NutritionSummaryModal({
 
   useEffect(() => {
     const loadMicros = async () => {
-      const { data: mealsData } = await supabase.from('meals').select('id').eq('user_id', userId).eq('data', selectedDate);
+      const { data: mealsData, error: mealsError } = await supabase.from('meals').select('id').eq('user_id', userId).eq('data', selectedDate);
+      if (mealsError) { console.warn('Erro ao carregar micros (meals):', mealsError.message); return; }
       if (!mealsData || mealsData.length === 0) return;
       const mealIds = mealsData.map(m => m.id);
-      const { data: items } = await supabase.from('meal_items').select('quantidade, food:foods(*)').in('meal_id', mealIds);
+      const { data: items, error: itemsError } = await supabase.from('meal_items').select('quantidade, food:foods(*)').in('meal_id', mealIds);
+      if (itemsError) { console.warn('Erro ao carregar micros (items):', itemsError.message); return; }
       if (!items) return;
 
       const totals = { fibras: 0, sodio: 0, acucares: 0, gordura_saturada: 0, colesterol: 0, potassio: 0 };
@@ -84,10 +86,11 @@ export default function NutritionSummaryModal({
         dates.push(formatDate(d));
       }
 
-      const { data: mealsData } = await supabase
+      const { data: mealsData, error: mealsError } = await supabase
         .from('meals').select('id, data').eq('user_id', userId)
         .in('data', dates);
 
+      if (mealsError) { console.warn('Erro ao carregar semana (meals):', mealsError.message); setLoadingWeek(false); return; }
       if (!mealsData || mealsData.length === 0) {
         setWeekData(dates.map(date => ({
           date, label: new Date(date + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'short' }).slice(0, 3),
@@ -98,9 +101,10 @@ export default function NutritionSummaryModal({
       }
 
       const mealIds = mealsData.map(m => m.id);
-      const { data: items } = await supabase
+      const { data: items, error: itemsError } = await supabase
         .from('meal_items').select('meal_id, calorias_calculadas, proteina, carbo, gordura')
         .in('meal_id', mealIds);
+      if (itemsError) { console.warn('Erro ao carregar semana (items):', itemsError.message); setLoadingWeek(false); return; }
 
       const mealDateMap: Record<string, string> = {};
       mealsData.forEach(m => { mealDateMap[m.id] = m.data; });
@@ -197,10 +201,12 @@ export default function NutritionSummaryModal({
     if (tab !== 'semana' || weekData.length === 0) return;
     const loadWeekMicros = async () => {
       const dates = weekData.map(d => d.date);
-      const { data: mealsData } = await supabase.from('meals').select('id').eq('user_id', userId).in('data', dates);
+      const { data: mealsData, error: mealsError } = await supabase.from('meals').select('id').eq('user_id', userId).in('data', dates);
+      if (mealsError) { console.warn('Erro ao carregar micros da semana (meals):', mealsError.message); return; }
       if (!mealsData || mealsData.length === 0) return;
       const mealIds = mealsData.map(m => m.id);
-      const { data: items } = await supabase.from('meal_items').select('quantidade, food:foods(*)').in('meal_id', mealIds);
+      const { data: items, error: itemsError } = await supabase.from('meal_items').select('quantidade, food:foods(*)').in('meal_id', mealIds);
+      if (itemsError) { console.warn('Erro ao carregar micros da semana (items):', itemsError.message); return; }
       if (!items) return;
       const totals = { fibras: 0, sodio: 0, acucares: 0, gordura_saturada: 0, colesterol: 0, potassio: 0 };
       items.forEach((item: any) => {
