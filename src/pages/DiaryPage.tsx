@@ -1,5 +1,4 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useApp } from '@/context/AppContext';
 import { useAuth } from '@/context/AuthContext';
 import { Meal, MealItem, TipoRefeicao, TIPO_REFEICAO_LABELS, REFEICOES_PADRAO } from '@/types';
@@ -26,7 +25,6 @@ export default function DiaryPage() {
     getMealsForDate, getDaySummary, getMetaCalorica, getMacroMetas,
   } = useApp();
   const { user } = useAuth();
-  const navigate = useNavigate();
 
   const [addFoodMealId, setAddFoodMealId] = useState<string | null>(null);
   const [editingItem, setEditingItem] = useState<{ mealId: string; item: MealItem } | null>(null);
@@ -71,12 +69,13 @@ export default function DiaryPage() {
   // Carrega config do banco
   const loadMealConfig = useCallback(async () => {
     if (!user) return;
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('user_meal_config')
       .select('id, tipo, nome_personalizado, ordem')
       .eq('user_id', user.id)
       .eq('ativo', true)
       .order('ordem');
+    if (error) { console.warn('Erro ao carregar config de refeições:', error.message); setConfigLoaded(true); return; }
     if (data) {
       setMealConfig(data as MealConfigItem[]);
       if (data.length === 0) await initDefaultMealConfig();
@@ -267,7 +266,7 @@ export default function DiaryPage() {
             draggable
             onDragStart={() => setDraggingId(meal.id)}
             onDragOver={e => e.preventDefault()}
-            onDrop={() => {
+            onDrop={async () => {
               if (!draggingId || draggingId === meal.id) return;
               const ids = displayMeals.map((m: any) => m.id);
               const from = ids.indexOf(draggingId);
@@ -278,9 +277,12 @@ export default function DiaryPage() {
               newConfig.splice(to, 0, moved);
               const updated = newConfig.map((mc, i) => ({ ...mc, ordem: i }));
               setMealConfig(updated);
-              if (user) updated.forEach(mc => {
-                supabase.from('user_meal_config').update({ ordem: mc.ordem }).eq('id', mc.id);
-              });
+              if (user) {
+                for (const mc of updated) {
+                  const { error } = await supabase.from('user_meal_config').update({ ordem: mc.ordem }).eq('id', mc.id);
+                  if (error) console.warn('Erro ao reordenar refeição:', error.message);
+                }
+              }
               setDraggingId(null);
             }}
             onDragEnd={() => setDraggingId(null)}

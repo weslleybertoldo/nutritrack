@@ -46,6 +46,8 @@ export async function signInWithGoogle(): Promise<{ error?: string }> {
         resolve({ error: "Login cancelado ou expirado" });
       }, 120000); // 2 min timeout
 
+      let listenerHandle: { remove: () => Promise<void> } | null = null;
+
       const handleUrl = async (event: { url: string }) => {
         if (!event.url.startsWith(REDIRECT_SCHEME)) return;
 
@@ -123,11 +125,13 @@ export async function signInWithGoogle(): Promise<{ error?: string }> {
       };
 
       // Escuta o deep link
-      App.addListener("appUrlOpen", handleUrl);
+      listenerHandle = App.addListener("appUrlOpen", handleUrl);
 
-      // Limpa o listener após resolução
+      // Limpa apenas este listener após resolução
       sessionPromise.then(() => {
-        App.removeAllListeners();
+        if (listenerHandle) {
+          listenerHandle.remove();
+        }
       });
     });
 

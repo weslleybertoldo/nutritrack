@@ -112,10 +112,10 @@ export function generateUserReport(detail: UserDetail) {
   addTitle('2. Composição Corporal');
 
   if (p.percentual_gordura != null) {
-    addLabel('% Gordura: ', `${Number(p.percentual_gordura).toFixed(1)}%`);
+    addLabel('% Gordura: ', `${(Number(p.percentual_gordura) || 0).toFixed(1)}%`);
     y += 6;
-    addLabel('Massa Gorda: ', p.massa_gorda != null ? `${Number(p.massa_gorda).toFixed(1)} kg` : '—');
-    addLabel('Massa Magra: ', p.massa_magra != null ? `${Number(p.massa_magra).toFixed(1)} kg` : '—', pageW / 2);
+    addLabel('Massa Gorda: ', p.massa_gorda != null ? `${(Number(p.massa_gorda) || 0).toFixed(1)} kg` : '—');
+    addLabel('Massa Magra: ', p.massa_magra != null ? `${(Number(p.massa_magra) || 0).toFixed(1)} kg` : '—', pageW / 2);
     y += 6;
   } else {
     doc.setFont('helvetica', 'normal');
@@ -165,19 +165,19 @@ export function generateUserReport(detail: UserDetail) {
 
   const tmbUsada = p.tmb_metodo === 'katch' ? 'Katch-McArdle' : 'Mifflin-St Jeor';
   addLabel('TMB utilizada: ', tmbUsada);
-  addLabel('Nível atividade: ', `×${p.nivel_atividade || 1.55}`, pageW / 2);
+  addLabel('Nível atividade: ', `×${p.nivel_atividade ?? 1.55}`, pageW / 2);
   y += 6;
-  addLabel('Meta base: ', `${metaCalc.metaBase} kcal`);
-  addLabel('Ajuste: ', `${p.ajuste_calorico || 0} kcal`, pageW / 2);
+  addLabel('Meta base: ', `${metaCalc.metaBase || 0} kcal`);
+  addLabel('Ajuste: ', `${p.ajuste_calorico ?? 0} kcal`, pageW / 2);
   y += 6;
-  addLabel('Meta final: ', `${metaCalc.metaFinal} kcal/dia`);
+  addLabel('Meta final: ', `${metaCalc.metaFinal || 0} kcal/dia`);
   y += 8;
 
-  addLabel('Proteína: ', `${macros.proteina.g}g (${macros.proteina.pct}%)`);
+  addLabel('Proteína: ', `${macros.proteina.g || 0}g (${macros.proteina.pct || 0}%)`);
   y += 6;
-  addLabel('Gordura: ', `${macros.gordura.g}g (${macros.gordura.pct}%)`);
+  addLabel('Gordura: ', `${macros.gordura.g || 0}g (${macros.gordura.pct || 0}%)`);
   y += 6;
-  addLabel('Carboidrato: ', `${macros.carbo.g}g (${macros.carbo.pct}%)`);
+  addLabel('Carboidrato: ', `${macros.carbo.g || 0}g (${macros.carbo.pct || 0}%)`);
   y += 4;
 
   // ===== SEÇÃO 4: DIÁRIO ATUAL =====
@@ -223,7 +223,8 @@ export function generateUserReport(detail: UserDetail) {
         const foodName = item.food?.nome || 'Alimento';
         const unit = item.food?.unidade || 'g';
         const cal = Math.round(Number(item.calorias_calculadas) || 0);
-        doc.text(`  • ${foodName} — ${item.quantidade}${unit} (${cal} kcal)`, margin, y);
+        const qty = item.quantidade || 0;
+        doc.text(`  • ${foodName} — ${qty}${unit} (${cal} kcal)`, margin, y);
         y += 5;
       });
       y += 2;
@@ -293,6 +294,6 @@ export function generateUserReport(detail: UserDetail) {
   }
 
   // Save
-  const safeName = (p.nome || 'usuario').replace(/\s+/g, '-').replace(/[^a-zA-Z0-9-]/g, '');
+  const safeName = ((p.nome || 'usuario') + '').replace(/\s+/g, '-').replace(/[^a-zA-Z0-9-]/g, '');
   doc.save(`Relatorio-${safeName}-${p.user_code || 'ID'}.pdf`);
 }

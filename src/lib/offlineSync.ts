@@ -213,62 +213,78 @@ export function incrementRetry() {
 
 // ── Sync principal ──────────────────────────────────────────────────────────
 
+let syncInProgress = false;
+
 export async function syncPendingOperations(): Promise<{
   synced: number;
   failed: number;
 }> {
+  if (syncInProgress) return { synced: 0, failed: 0 };
   if (!navigator.onLine) return { synced: 0, failed: 0 };
 
   const ops = getPending();
   if (ops.length === 0) return { synced: 0, failed: 0 };
 
-  // Garante sessão válida antes de sincronizar (evita erro de RLS)
+  syncInProgress = true;
   try {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      const { data: { session: refreshed } } = await supabase.auth.refreshSession();
-      if (!refreshed) {
-        // Sem sessão — guarda operações e tenta na próxima vez (sem alarmar)
-        return { synced: 0, failed: 0 };
+    // Garante sessão válida antes de sincronizar (evita erro de RLS)
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        const { data: { session: refreshed } } = await supabase.auth.refreshSession();
+        if (!refreshed) {
+          // Sem sessão — guarda operações e tenta na próxima vez (sem alarmar)
+          return { synced: 0, failed: 0 };
+        }
+      }
+    } catch {
+      // Sem conexão pra validar sessão — não arrisca perder dados
+      return { synced: 0, failed: 0 };
+    }
+
+    // Compacta fila antes de enviar (remove operações redundantes)
+    const compacted = compactQueue(ops);
+    const processedIds = new Set<string>();
+    const failures: PendingOperation[] = [];
+    let synced = 0;
+
+    for (const op of compacted) {
+      const outcome = await executePendingOp(op);
+      if (outcome === "ok") {
+        synced++;
+        processedIds.add(op.id);
+      } else if (outcome === "discard") {
+        synced++;
+        processedIds.add(op.id);
+      } else {
+        const sevenDays = 7 * 24 * 60 * 60 * 1000;
+        if (Date.now() - op.createdAt < sevenDays) {
+          failures.push(op);
+        }
+        processedIds.add(op.id);
       }
     }
-  } catch {
-    // Sem conexão pra validar sessão — não arrisca perder dados
-    return { synced: 0, failed: 0 };
+
+    // Relê a fila para preservar operações adicionadas durante a sync
+    const currentOps = getPending();
+    const newOpsDuringSync = currentOps.filter(op => !processedIds.has(op.id));
+    savePending([...failures, ...newOpsDuringSync]);
+    return { synced, failed: failures.length };
+  } finally {
+    syncInProgress = false;
   }
-
-  // Compacta fila antes de enviar (remove operações redundantes)
-  const compacted = compactQueue(ops);
-  const failures: PendingOperation[] = [];
-  let synced = 0;
-
-  for (const op of compacted) {
-    const outcome = await executePendingOp(op);
-    if (outcome === "ok") {
-      synced++;
-    } else if (outcome === "discard") {
-      synced++;
-    } else {
-      const sevenDays = 7 * 24 * 60 * 60 * 1000;
-      if (Date.now() - op.createdAt < sevenDays) {
-        failures.push(op);
-      }
-    }
-  }
-
-  savePending(failures);
-  return { synced, failed: failures.length };
 }
 
 // ── Sync ao re-logar ────────────────────────────────────────────────────────
 
 let authSyncRegistered = false;
+let authSyncSubscription: { unsubscribe: () => void } | null = null;
 
 export function registerAuthSync() {
   if (authSyncRegistered) return;
   authSyncRegistered = true;
 
-  supabase.auth.onAuthStateChange((event) => {
+  const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
     if (event === "SIGNED_IN" && navigator.onLine) {
       const pending = getPendingCount();
       if (pending > 0) {
@@ -276,6 +292,15 @@ export function registerAuthSync() {
       }
     }
   });
+  authSyncSubscription = subscription;
+}
+
+export function unregisterAuthSync() {
+  if (authSyncSubscription) {
+    authSyncSubscription.unsubscribe();
+    authSyncSubscription = null;
+    authSyncRegistered = false;
+  }
 }
 
 // ── Aviso de dados pendentes antes de sair ──────────────────────────────────
