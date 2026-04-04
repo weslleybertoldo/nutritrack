@@ -595,12 +595,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [user, loadRecipes]);
 
   const deleteRecipe = useCallback(async (recipeId: string) => {
+    if (!user) return;
     try {
       const { error } = await supabase
         .from('recipes')
         .delete()
         .eq('id', recipeId)
-        .eq('user_id', user?.id || '');
+        .eq('user_id', user.id);
       if (error) throw error;
       setState(s => ({ ...s, recipes: s.recipes.filter(r => r.id !== recipeId) }));
     } catch (err: any) {
