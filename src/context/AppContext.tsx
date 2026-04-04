@@ -321,8 +321,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // ── MEALS ─────────────────────────────────────────────────────────────────
   const addMeal = useCallback(async (m: Omit<Meal, 'id' | 'user_id'>): Promise<Meal> => {
+    if (!user) throw new Error('Usuário não autenticado');
     const tempId = crypto.randomUUID();
-    const mealPayload = { ...m, user_id: user!.id };
+    const mealPayload = { ...m, user_id: user.id };
     // Atualização otimista
     const optimisticMeal: Meal = { ...mealPayload, id: tempId, items: [] } as Meal;
     setState(s => ({ ...s, meals: [...s.meals, optimisticMeal] }));
@@ -401,6 +402,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const removeMeal = useCallback(async (mealId: string) => {
+    if (!user) return;
     // Atualização otimista
     setState(s => ({ ...s, meals: s.meals.filter(m => m.id !== mealId) }));
     try {
@@ -408,10 +410,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         .from('meals')
         .delete()
         .eq('id', mealId)
-        .eq('user_id', user!.id);
+        .eq('user_id', user.id);
       if (error) throw error;
     } catch (err: any) {
-      addPendingOperation('meals', 'delete', undefined, undefined, { id: mealId, user_id: user!.id });
+      addPendingOperation('meals', 'delete', undefined, undefined, { id: mealId, user_id: user.id });
     }
   }, [user]);
 
@@ -598,7 +600,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         .from('recipes')
         .delete()
         .eq('id', recipeId)
-        .eq('user_id', user!.id); // segurança: garante ownership
+        .eq('user_id', user?.id || '');
       if (error) throw error;
       setState(s => ({ ...s, recipes: s.recipes.filter(r => r.id !== recipeId) }));
     } catch (err: any) {

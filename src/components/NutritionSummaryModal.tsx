@@ -50,26 +50,30 @@ export default function NutritionSummaryModal({
 
   useEffect(() => {
     const loadMicros = async () => {
-      const { data: mealsData, error: mealsError } = await supabase.from('meals').select('id').eq('user_id', userId).eq('data', selectedDate);
-      if (mealsError) { console.warn('Erro ao carregar micros (meals):', mealsError.message); return; }
-      if (!mealsData || mealsData.length === 0) return;
-      const mealIds = mealsData.map(m => m.id);
-      const { data: items, error: itemsError } = await supabase.from('meal_items').select('quantidade, food:foods(*)').in('meal_id', mealIds);
-      if (itemsError) { console.warn('Erro ao carregar micros (items):', itemsError.message); return; }
-      if (!items) return;
+      try {
+        const { data: mealsData, error: mealsError } = await supabase.from('meals').select('id').eq('user_id', userId).eq('data', selectedDate);
+        if (mealsError) { console.warn('Erro ao carregar micros (meals):', mealsError.message); return; }
+        if (!mealsData || mealsData.length === 0) return;
+        const mealIds = mealsData.map(m => m.id);
+        const { data: items, error: itemsError } = await supabase.from('meal_items').select('quantidade, food:foods(*)').in('meal_id', mealIds);
+        if (itemsError) { console.warn('Erro ao carregar micros (items):', itemsError.message); return; }
+        if (!items) return;
 
-      const totals = { fibras: 0, sodio: 0, acucares: 0, gordura_saturada: 0, colesterol: 0, potassio: 0 };
-      items.forEach((item: any) => {
-        if (!item.food) return;
-        const f = item.quantidade / 100;
-        totals.fibras += (item.food.fibras_por_100 || 0) * f;
-        totals.sodio += (item.food.sodio_por_100 || 0) * f;
-        totals.acucares += (item.food.acucares_por_100 || 0) * f;
-        totals.gordura_saturada += (item.food.gordura_saturada_por_100 || 0) * f;
-        totals.colesterol += (item.food.colesterol_por_100 || 0) * f;
-        totals.potassio += (item.food.potassio_por_100 || 0) * f;
-      });
-      setMicroTotals(totals);
+        const totals = { fibras: 0, sodio: 0, acucares: 0, gordura_saturada: 0, colesterol: 0, potassio: 0 };
+        items.forEach((item: any) => {
+          if (!item.food) return;
+          const f = item.quantidade / 100;
+          totals.fibras += (item.food.fibras_por_100 || 0) * f;
+          totals.sodio += (item.food.sodio_por_100 || 0) * f;
+          totals.acucares += (item.food.acucares_por_100 || 0) * f;
+          totals.gordura_saturada += (item.food.gordura_saturada_por_100 || 0) * f;
+          totals.colesterol += (item.food.colesterol_por_100 || 0) * f;
+          totals.potassio += (item.food.potassio_por_100 || 0) * f;
+        });
+        setMicroTotals(totals);
+      } catch (e) {
+        console.error('[NutritionSummary] Erro ao carregar micros:', e);
+      }
     };
     loadMicros();
   }, [userId, selectedDate]);
@@ -200,26 +204,30 @@ export default function NutritionSummaryModal({
   useEffect(() => {
     if (tab !== 'semana' || weekData.length === 0) return;
     const loadWeekMicros = async () => {
-      const dates = weekData.map(d => d.date);
-      const { data: mealsData, error: mealsError } = await supabase.from('meals').select('id').eq('user_id', userId).in('data', dates);
-      if (mealsError) { console.warn('Erro ao carregar micros da semana (meals):', mealsError.message); return; }
-      if (!mealsData || mealsData.length === 0) return;
-      const mealIds = mealsData.map(m => m.id);
-      const { data: items, error: itemsError } = await supabase.from('meal_items').select('quantidade, food:foods(*)').in('meal_id', mealIds);
-      if (itemsError) { console.warn('Erro ao carregar micros da semana (items):', itemsError.message); return; }
-      if (!items) return;
-      const totals = { fibras: 0, sodio: 0, acucares: 0, gordura_saturada: 0, colesterol: 0, potassio: 0 };
-      items.forEach((item: any) => {
-        if (!item.food) return;
-        const f = item.quantidade / 100;
-        totals.fibras += (item.food.fibras_por_100 || 0) * f;
-        totals.sodio += (item.food.sodio_por_100 || 0) * f;
-        totals.acucares += (item.food.acucares_por_100 || 0) * f;
-        totals.gordura_saturada += (item.food.gordura_saturada_por_100 || 0) * f;
-        totals.colesterol += (item.food.colesterol_por_100 || 0) * f;
-        totals.potassio += (item.food.potassio_por_100 || 0) * f;
-      });
-      setWeekMicroTotals(totals);
+      try {
+        const dates = weekData.map(d => d.date);
+        const { data: mealsData, error: mealsError } = await supabase.from('meals').select('id').eq('user_id', userId).in('data', dates);
+        if (mealsError) { console.warn('Erro ao carregar micros da semana (meals):', mealsError.message); return; }
+        if (!mealsData || mealsData.length === 0) return;
+        const mealIds = mealsData.map(m => m.id);
+        const { data: items, error: itemsError } = await supabase.from('meal_items').select('quantidade, food:foods(*)').in('meal_id', mealIds);
+        if (itemsError) { console.warn('Erro ao carregar micros da semana (items):', itemsError.message); return; }
+        if (!items) return;
+        const totals = { fibras: 0, sodio: 0, acucares: 0, gordura_saturada: 0, colesterol: 0, potassio: 0 };
+        items.forEach((item: any) => {
+          if (!item.food) return;
+          const f = item.quantidade / 100;
+          totals.fibras += (item.food.fibras_por_100 || 0) * f;
+          totals.sodio += (item.food.sodio_por_100 || 0) * f;
+          totals.acucares += (item.food.acucares_por_100 || 0) * f;
+          totals.gordura_saturada += (item.food.gordura_saturada_por_100 || 0) * f;
+          totals.colesterol += (item.food.colesterol_por_100 || 0) * f;
+          totals.potassio += (item.food.potassio_por_100 || 0) * f;
+        });
+        setWeekMicroTotals(totals);
+      } catch (e) {
+        console.error('[NutritionSummary] Erro ao carregar micros da semana:', e);
+      }
     };
     loadWeekMicros();
   }, [tab, weekData, userId]);
