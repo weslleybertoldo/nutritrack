@@ -45,6 +45,7 @@ interface AppContextValue extends AppState {
   setProfile: (p: Partial<Profile>) => void;
   setSelectedDate: (d: string) => void;
   addFood: (f: Omit<Food, 'id'>) => Promise<Food>;
+  updateFood: (id: string, updates: Partial<Omit<Food, 'id'>>) => Promise<void>;
   addMeal: (m: Omit<Meal, 'id' | 'user_id'>) => Promise<Meal>;
   addMealItem: (mealId: string, item: Omit<MealItem, 'id' | 'meal_id'>) => Promise<void>;
   updateMealItem: (mealId: string, itemId: string, updates: { quantidade: number; calorias_calculadas: number; proteina: number; carbo: number; gordura: number }) => Promise<void>;
@@ -307,6 +308,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
       throw err;
     }
   }, [user]);
+
+  // ── UPDATE FOOD ───────────────────────────────────────────────────────────
+  const updateFood = useCallback(async (id: string, updates: Partial<Omit<Food, 'id'>>) => {
+    try {
+      const { error } = await supabase.from('foods').update({ ...updates, updated_at: new Date().toISOString() }).eq('id', id);
+      if (error) throw error;
+      setState(s => ({ ...s, foods: s.foods.map(f => f.id === id ? { ...f, ...updates } : f) }));
+      toast.success('Alimento atualizado!');
+    } catch (err: any) {
+      console.error('[AppContext] Erro ao atualizar alimento:', err);
+      toast.error('Erro ao atualizar alimento');
+      throw err;
+    }
+  }, []);
 
   const searchFoodByBarcode = useCallback(async (code: string): Promise<Food | null> => {
     try {
@@ -661,7 +676,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   return (
     <AppContext.Provider value={{
-      ...state, setProfile, setSelectedDate, addFood, addMeal, addMealItem,
+      ...state, setProfile, setSelectedDate, addFood, updateFood, addMeal, addMealItem,
       updateMealItem, removeMealItem, removeMeal, toggleFavorite, addRecentFood,
       refreshRecentFoods, getMealsForDate,
       getDaySummary, getMetaCalorica, getMacroMetas, refreshFoods, searchFoodByBarcode,

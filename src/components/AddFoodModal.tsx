@@ -7,6 +7,7 @@ import { Slider } from '@/components/ui/slider';
 import CreateFoodForm from '@/components/CreateFoodForm';
 import NutritionTable from '@/components/NutritionTable';
 import BarcodeScanner from '@/components/BarcodeScanner';
+import EditFoodForm from '@/components/EditFoodForm';
 import RecipeModal from '@/components/RecipeModal';
 import { toast } from 'sonner';
 
@@ -21,7 +22,7 @@ export default function AddFoodModal({ mealId, onClose }: AddFoodModalProps) {
   const {
     foods, favorites, recentFoods, recentFoodsWithQty,
     addMealItem, toggleFavorite, addRecentFood, refreshRecentFoods, searchFoodByBarcode,
-    recipes, loadRecipes, createRecipe, updateRecipe, deleteRecipe, addRecipeToMeal,
+    recipes, loadRecipes, createRecipe, updateRecipe, deleteRecipe, addRecipeToMeal, updateFood,
   } = useApp();
   const [tab, setTab] = useState<Tab>('pesquisar');
   const [search, setSearch] = useState('');
@@ -34,6 +35,8 @@ export default function AddFoodModal({ mealId, onClose }: AddFoodModalProps) {
   const [editingRecipe, setEditingRecipe] = useState<Recipe | null>(null);
   const [expandedRecipe, setExpandedRecipe] = useState<string | null>(null);
   const [deletingRecipeId, setDeletingRecipeId] = useState<string | null>(null);
+  const [addedCount, setAddedCount] = useState(0);
+  const [editingFood, setEditingFood] = useState<Food | null>(null);
 
   const quantidadeNum = quantidadeStr === '' ? 0 : parseFloat(quantidadeStr) || 0;
 
@@ -65,9 +68,11 @@ export default function AddFoodModal({ mealId, onClose }: AddFoodModalProps) {
       food: selectedFood,
     });
     addRecentFood(selectedFood.id, quantidadeNum);
+    toast.success(`${selectedFood.nome} adicionado!`);
+    setAddedCount(c => c + 1);
     setSelectedFood(null);
     setQuantidadeStr('100');
-    onClose();
+    // Não fecha o modal — permite adicionar mais alimentos
   };
 
   const handleBarcodeScanned = useCallback(async (code: string) => {
@@ -151,6 +156,34 @@ export default function AddFoodModal({ mealId, onClose }: AddFoodModalProps) {
       </button>
     );
   };
+
+  // ── Tela de edição de alimento ──
+  if (editingFood) {
+    return (
+      <div className="modal-overlay">
+        <div className="absolute inset-0 bg-foreground/30 backdrop-blur-sm" onClick={() => setEditingFood(null)} />
+        <div className="absolute bottom-0 left-0 right-0 max-h-[90vh] rounded-t-2xl bg-card animate-slide-up flex flex-col">
+          <div className="flex items-center justify-between border-b border-border bg-card px-4 py-3 shrink-0">
+            <h2 className="font-heading font-semibold">Editar Alimento</h2>
+            <button onClick={() => setEditingFood(null)} className="p-1"><X className="h-5 w-5" /></button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-4 min-h-0 bottom-sheet-content">
+            <EditFoodForm
+              food={editingFood}
+              onSaved={(updatedFood) => {
+                setEditingFood(null);
+                // Se o alimento editado era o selecionado, atualiza
+                if (selectedFood?.id === updatedFood.id) {
+                  setSelectedFood(updatedFood);
+                }
+              }}
+              onCancel={() => setEditingFood(null)}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (showScanner) {
     return <BarcodeScanner onScanned={handleBarcodeScanned} onClose={() => setShowScanner(false)} />;
@@ -392,13 +425,41 @@ export default function AddFoodModal({ mealId, onClose }: AddFoodModalProps) {
               </div>
 
               <NutritionTable food={selectedFood} quantidade={quantidadeNum} />
+
+              {/* Botão editar alimento (abaixo dos micronutrientes) */}
+              {selectedFood.criado_por && (
+                <button
+                  onClick={() => {
+                    if (window.confirm(`Deseja editar o alimento "${selectedFood.nome}"?`)) {
+                      setEditingFood(selectedFood);
+                    }
+                  }}
+                  className="w-full flex items-center justify-center gap-1.5 py-2 text-xs text-muted-foreground hover:text-primary font-heading transition-colors"
+                >
+                  <Pencil className="h-3 w-3" /> Editar alimento
+                </button>
+              )}
             </div>
 
-            <div className="sticky bottom-0 shrink-0 border-t border-border bg-card p-4 pb-safe">
+            <div className="sticky bottom-0 shrink-0 border-t border-border bg-card p-4 pb-safe space-y-2">
               <Button className="w-full" size="lg" onClick={handleAdd} disabled={quantidadeNum <= 0}>
                 + Adicionar à refeição
               </Button>
+              {addedCount > 0 && (
+                <Button variant="outline" className="w-full" size="sm" onClick={onClose}>
+                  Concluir ({addedCount} adicionado{addedCount > 1 ? 's' : ''})
+                </Button>
+              )}
             </div>
+          </div>
+        )}
+
+        {/* Botão concluir flutuante quando nenhum alimento selecionado */}
+        {!selectedFood && addedCount > 0 && (
+          <div className="sticky bottom-0 shrink-0 border-t border-border bg-card p-4 pb-safe">
+            <Button className="w-full" size="lg" onClick={onClose}>
+              Concluir ({addedCount} adicionado{addedCount > 1 ? 's' : ''})
+            </Button>
           </div>
         )}
       </div>
