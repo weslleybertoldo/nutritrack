@@ -90,15 +90,18 @@ jobs:
       - name: Bump version for next build
         run: |
           CURRENT=$(node -p "require('./package.json').version")
-          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
-          NEW_PATCH=$((PATCH + 1))
-          NEXT="$MAJOR.$MINOR.$NEW_PATCH"
+          IFS='.' read -r MAJOR MINOR <<< "$CURRENT"
+          NEW_MINOR=$((MINOR + 1))
+          NEXT="$MAJOR.$NEW_MINOR"
+          echo "Preparando próxima versão: $CURRENT -> $NEXT"
+
           node -e "
             const fs = require('fs');
             const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
             pkg.version = '$NEXT';
             fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
           "
+
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add package.json
