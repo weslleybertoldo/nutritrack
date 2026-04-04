@@ -183,13 +183,18 @@ export default function AddFoodModal({ mealId, onClose }: AddFoodModalProps) {
         recipe={editingRecipe}
         foods={foods}
         onSave={async (nome, descricao, itens) => {
-          if (editingRecipe) {
-            await updateRecipe(editingRecipe.id, nome, descricao || '', itens);
-          } else {
-            await createRecipe(nome, descricao || '', itens);
+          try {
+            if (editingRecipe) {
+              await updateRecipe(editingRecipe.id, nome, descricao || '', itens);
+            } else {
+              await createRecipe(nome, descricao || '', itens);
+            }
+            setShowRecipeModal(false);
+            setEditingRecipe(null);
+          } catch (e) {
+            console.error('[AddFoodModal] Erro ao salvar receita:', e);
+            toast.error('Erro ao salvar receita.');
           }
-          setShowRecipeModal(false);
-          setEditingRecipe(null);
         }}
         onClose={() => { setShowRecipeModal(false); setEditingRecipe(null); }}
       />

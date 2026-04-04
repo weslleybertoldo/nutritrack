@@ -81,7 +81,8 @@ export default function CreateFoodForm({ onCreated, initialBarcode, onExistingFo
           const canvas = document.createElement('canvas');
           canvas.width = width;
           canvas.height = height;
-          const ctx = canvas.getContext('2d')!;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) { reject(new Error('Canvas context unavailable')); return; }
           ctx.drawImage(img, 0, 0, width, height);
           const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
           resolve(dataUrl.split(',')[1]);
