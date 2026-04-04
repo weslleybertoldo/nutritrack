@@ -1,8 +1,17 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Check, Pencil, Trash2, X } from 'lucide-react';
+import { Plus, Check, Pencil, Trash2, X, Bell, BellOff } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/context/AuthContext';
 import { toast } from 'sonner';
+import {
+  getReminder,
+  setReminder,
+  removeReminder,
+  scheduleHabitNotification,
+  cancelHabitNotification,
+  onHabitCompleted,
+  createHabitReminderChannel,
+} from '@/lib/habitReminders';
 
 interface Habito {
   id: string;
@@ -24,6 +33,13 @@ export default function HabitosCard({ selectedDate }: HabitosCardProps) {
   const [editandoNome, setEditandoNome] = useState('');
   const [loading, setLoading] = useState(true);
   const [adicionando, setAdicionando] = useState(false);
+
+  // Estado do lembrete sendo configurado
+  const [configurandoLembreteId, setConfigurandoLembreteId] = useState<string | null>(null);
+  const [lembreteHora, setLembreteHora] = useState('20:00');
+
+  // Cria canal de notificação na montagem
+  useEffect(() => { createHabitReminderChannel(); }, []);
 
   const loadHabitos = useCallback(async () => {
     if (!user) return;
@@ -68,6 +84,7 @@ export default function HabitosCard({ selectedDate }: HabitosCardProps) {
 
   const handleToggle = async (habitoId: string) => {
     if (!user) return;
+    const habito = habitos.find(h => h.id === habitoId);
     const jaConcluido = concluidos.has(habitoId);
     if (jaConcluido) {
       const { error } = await supabase.from('habitos_registro')
@@ -82,6 +99,11 @@ export default function HabitosCard({ selectedDate }: HabitosCardProps) {
         .insert({ user_id: user.id, habito_id: habitoId, data: selectedDate });
       if (error) { console.warn('Erro ao marcar hábito:', error.message); toast.error('Erro ao marcar hábito'); return; }
       setConcluidos(prev => new Set([...prev, habitoId]));
+
+      // Hábito concluído → cancela notificação de hoje e reagenda para amanhã
+      if (habito) {
+        onHabitCompleted(habitoId, habito.nome);
+      }
     }
   };
 
@@ -105,6 +127,12 @@ export default function HabitosCard({ selectedDate }: HabitosCardProps) {
     if (error) { console.warn('Erro ao renomear hábito:', error.message); toast.error('Erro ao renomear hábito'); return; }
     setHabitos(prev => prev.map(h => h.id === id ? { ...h, nome: editandoNome.trim() } : h));
     setEditandoId(null);
+
+    // Se tem lembrete ativo, reagenda com novo nome
+    const reminder = getReminder(id);
+    if (reminder.ativo) {
+      scheduleHabitNotification(id, editandoNome.trim(), reminder.hora, reminder.minuto);
+    }
   };
 
   const handleExcluir = async (id: string) => {
@@ -112,6 +140,37 @@ export default function HabitosCard({ selectedDate }: HabitosCardProps) {
     if (error) { console.warn('Erro ao excluir hábito:', error.message); toast.error('Erro ao excluir hábito'); return; }
     setHabitos(prev => prev.filter(h => h.id !== id));
     setConcluidos(prev => { const s = new Set(prev); s.delete(id); return s; });
+
+    // Remove lembrete e cancela notificação
+    removeReminder(id);
+    cancelHabitNotification(id);
+  };
+
+  // ── Lembrete ──
+
+  const handleAbrirLembrete = (habitoId: string) => {
+    const reminder = getReminder(habitoId);
+    setLembreteHora(`${String(reminder.hora).padStart(2, '0')}:${String(reminder.minuto).padStart(2, '0')}`);
+    setConfigurandoLembreteId(habitoId);
+  };
+
+  const handleSalvarLembrete = async (habitoId: string) => {
+    const [h, m] = lembreteHora.split(':').map(Number);
+    const habito = habitos.find(hab => hab.id === habitoId);
+    if (!habito) return;
+
+    setReminder(habitoId, h, m, true);
+    await scheduleHabitNotification(habitoId, habito.nome, h, m);
+    setConfigurandoLembreteId(null);
+    toast.success(`Lembrete de "${habito.nome}" configurado para ${lembreteHora}`);
+  };
+
+  const handleDesativarLembrete = async (habitoId: string) => {
+    const habito = habitos.find(hab => hab.id === habitoId);
+    setReminder(habitoId, 0, 0, false);
+    await cancelHabitNotification(habitoId);
+    setConfigurandoLembreteId(null);
+    toast.success(`Lembrete de "${habito?.nome}" desativado`);
   };
 
   if (loading) return null;
@@ -133,6 +192,7 @@ export default function HabitosCard({ selectedDate }: HabitosCardProps) {
       <div className="px-4 pb-3 flex flex-wrap gap-2">
         {habitos.map(h => {
           const feito = concluidos.has(h.id);
+          const reminder = getReminder(h.id);
           return (
             <div key={h.id} className="flex items-center gap-1">
               {editando && editandoId === h.id ? (
@@ -158,10 +218,24 @@ export default function HabitosCard({ selectedDate }: HabitosCardProps) {
                 >
                   {feito && <Check size={11} />}
                   {h.nome}
+                  {reminder.ativo && !editando && (
+                    <Bell size={9} className="opacity-50" />
+                  )}
                 </button>
               )}
               {editando && editandoId !== h.id && (
                 <div className="flex gap-0.5">
+                  <button
+                    onClick={() => handleAbrirLembrete(h.id)}
+                    className={`p-1 transition-colors ${
+                      reminder.ativo
+                        ? 'text-primary hover:text-primary/80'
+                        : 'text-muted-foreground hover:text-primary'
+                    }`}
+                    title={reminder.ativo ? `Lembrete: ${String(reminder.hora).padStart(2, '0')}:${String(reminder.minuto).padStart(2, '0')}` : 'Configurar lembrete'}
+                  >
+                    {reminder.ativo ? <Bell size={11} /> : <BellOff size={11} />}
+                  </button>
                   <button
                     onClick={() => { setEditandoId(h.id); setEditandoNome(h.nome); }}
                     className="p-1 text-muted-foreground hover:text-primary transition-colors"
@@ -176,11 +250,46 @@ export default function HabitosCard({ selectedDate }: HabitosCardProps) {
                   </button>
                 </div>
               )}
+
+              {/* Popup de configuração de lembrete */}
+              {configurandoLembreteId === h.id && (
+                <div className="absolute z-50 mt-1 p-3 rounded-lg border border-border bg-card shadow-lg space-y-2" style={{ minWidth: '200px' }}>
+                  <p className="text-xs font-heading text-foreground">Lembrete para "{h.nome}"</p>
+                  <input
+                    type="time"
+                    value={lembreteHora}
+                    onChange={e => setLembreteHora(e.target.value)}
+                    className="w-full rounded-lg border border-input bg-background px-3 py-1.5 text-sm font-body focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleSalvarLembrete(h.id)}
+                      className="flex-1 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-heading"
+                    >
+                      Salvar
+                    </button>
+                    {getReminder(h.id).ativo && (
+                      <button
+                        onClick={() => handleDesativarLembrete(h.id)}
+                        className="py-1.5 px-3 border border-destructive/30 text-destructive rounded-lg text-xs font-heading"
+                      >
+                        Desativar
+                      </button>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => setConfigurandoLembreteId(null)}
+                    className="w-full text-center text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              )}
             </div>
           );
         })}
 
-        {/* Adicionar novo — clica no + para abrir input inline */}
+        {/* Adicionar novo */}
         {adicionando ? (
           <div className="flex items-center gap-1">
             <input

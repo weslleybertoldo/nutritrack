@@ -42,23 +42,26 @@ export default function BarcodeScanner({ onScanned, onClose }: BarcodeScannerPro
     let scanner: Html5Qrcode | null = null;
 
     const start = async () => {
-      // 5s timeout
+      // 12s timeout (dispositivos lentos podem demorar para iniciar câmera)
       timeoutRef.current = setTimeout(() => {
         if (mountedRef.current && !error) {
           setError('Câmera não carregou. Tente digitar manualmente.');
         }
-      }, 5000);
+      }, 12000);
 
       // Explicit permission request
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
         stream.getTracks().forEach(t => t.stop());
       } catch (err: any) {
+        console.error('[BarcodeScanner] Camera permission error:', err?.name, err?.message);
         if (!mountedRef.current) return;
         if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-          setError('Permissão de câmera negada. Ative nas configurações do navegador.');
+          setError('Permissão de câmera negada. Ative nas configurações do aparelho.');
+        } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+          setError('Nenhuma câmera encontrada neste dispositivo.');
         } else {
-          setError('Não foi possível acessar a câmera.');
+          setError('Não foi possível acessar a câmera. Tente digitar manualmente.');
         }
         return;
       }
@@ -82,12 +85,13 @@ export default function BarcodeScanner({ onScanned, onClose }: BarcodeScannerPro
             scannerRef.current = null;
             onScanned(decodedText);
           },
-          () => {}
+          () => {} // Callback a cada frame sem detecção — esperado
         );
 
         // Clear timeout on successful start
         if (timeoutRef.current) clearTimeout(timeoutRef.current);
-      } catch {
+      } catch (scanErr: any) {
+        console.error('[BarcodeScanner] Scanner start error:', scanErr?.message || scanErr);
         if (mountedRef.current) {
           setError('Erro ao iniciar o scanner. Tente digitar manualmente.');
         }
