@@ -20,6 +20,7 @@ function createResilientFetch(retries = 2, timeout = 15000) {
         clearTimeout(timeoutId);
 
         if (response.status === 401 || response.status === 403) {
+          clearTimeout(timeoutId);
           return response;
         }
 

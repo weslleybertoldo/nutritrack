@@ -186,7 +186,8 @@ async function executePendingOp(op: PendingOperation): Promise<"ok" | "retry" | 
       return "discard";
     }
     return "retry";
-  } catch {
+  } catch (err: any) {
+    console.warn(`[Sync] Exception na op ${op.type} ${op.table}:`, err?.message || err);
     return "retry";
   }
 }

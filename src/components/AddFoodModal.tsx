@@ -72,28 +72,43 @@ export default function AddFoodModal({ mealId, onClose }: AddFoodModalProps) {
 
   const handleBarcodeScanned = useCallback(async (code: string) => {
     setShowScanner(false);
-    const food = await searchFoodByBarcode(code);
-    if (food) {
-      setSelectedFood(food);
-      setQuantidadeStr('100');
-      toast.success(`Encontrado: ${food.nome}`);
-    } else {
-      toast.info('Alimento não encontrado para este código.');
-      setBarcodeForCreate(code);
-      setShowCreateFood(true);
+    try {
+      const food = await searchFoodByBarcode(code);
+      if (food) {
+        setSelectedFood(food);
+        setQuantidadeStr('100');
+        toast.success(`Encontrado: ${food.nome}`);
+      } else {
+        toast.info('Alimento não encontrado para este código.');
+        setBarcodeForCreate(code);
+        setShowCreateFood(true);
+      }
+    } catch (e) {
+      console.error('[AddFoodModal] Erro ao buscar por código:', e);
+      toast.error('Erro ao buscar alimento. Tente novamente.');
     }
   }, [searchFoodByBarcode]);
 
   const handleAddRecipeToMeal = async (recipe: Recipe) => {
-    await addRecipeToMeal(recipe, mealId);
-    toast.success(`Receita "${recipe.nome}" adicionada!`);
-    onClose();
+    try {
+      await addRecipeToMeal(recipe, mealId);
+      toast.success(`Receita "${recipe.nome}" adicionada!`);
+      onClose();
+    } catch (e) {
+      console.error('[AddFoodModal] Erro ao adicionar receita:', e);
+      toast.error('Erro ao adicionar receita.');
+    }
   };
 
   const handleDeleteRecipe = async (recipeId: string) => {
-    await deleteRecipe(recipeId);
-    setDeletingRecipeId(null);
-    toast.success('Receita excluída.');
+    try {
+      await deleteRecipe(recipeId);
+      setDeletingRecipeId(null);
+      toast.success('Receita excluída.');
+    } catch (e) {
+      console.error('[AddFoodModal] Erro ao excluir receita:', e);
+      toast.error('Erro ao excluir receita.');
+    }
   };
 
   const tabs: { id: Tab; icon: React.ElementType; label: string }[] = [

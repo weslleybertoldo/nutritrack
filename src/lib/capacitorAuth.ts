@@ -97,13 +97,14 @@ export async function signInWithGoogle(): Promise<{ error?: string }> {
                   user.user_metadata?.full_name ||
                   user.user_metadata?.name;
                 if (avatarUrl) {
-                  await supabase
+                  const { error: profileError } = await supabase
                     .from("profiles")
                     .update({
                       foto_url: avatarUrl,
                       ...(fullName ? { nome: fullName } : {}),
                     })
                     .eq("user_id", user.id);
+                  if (profileError) console.warn('[Auth] Erro ao salvar foto do perfil:', profileError.message);
                 }
               }
 
