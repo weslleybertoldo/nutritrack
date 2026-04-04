@@ -155,8 +155,9 @@ export default function CreateFoodForm({ onCreated, initialBarcode, onExistingFo
         await toggleFavorite(food.id);
       }
       onCreated(food);
-    } catch {
-      // error handled in addFood
+    } catch (e) {
+      console.error('[CreateFoodForm] Erro ao criar alimento:', e);
+      toast.error('Erro ao criar alimento. Tente novamente.');
     }
   };
 

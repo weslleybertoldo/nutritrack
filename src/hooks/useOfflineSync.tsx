@@ -44,8 +44,8 @@ export function useOfflineSync() {
       }
 
       // Silencioso quando synced=0 e failed=0 (sem sessão — não alarma)
-    } catch {
-      // Silencioso — tentará novamente na próxima vez
+    } catch (e) {
+      console.warn('[Sync] Erro na sincronização:', e);
     } finally {
       syncingRef.current = false;
       setSyncing(false);

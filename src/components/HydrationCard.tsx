@@ -66,12 +66,12 @@ export default function HydrationCard({ selectedDate, pesoKg }: HydrationCardPro
   }, [loadRecords]);
 
   const handleRegistrar = async () => {
+    if (!user) return;
     const ml = parseInt(quantidade, 10);
     if (!ml || ml <= 0) {
       toast.error('Informe uma quantidade válida');
       return;
     }
-    if (!user) return;
     setSaving(true);
     try {
       const { error } = await (supabase as any).from('water_intake').insert({
@@ -91,15 +91,17 @@ export default function HydrationCard({ selectedDate, pesoKg }: HydrationCardPro
   };
 
   const handleDelete = async (id: string) => {
+    if (!user) return;
     try {
       const { error } = await (supabase as any)
         .from('water_intake')
         .delete()
         .eq('id', id)
-        .eq('user_id', user!.id);
+        .eq('user_id', user.id);
       if (error) throw error;
       await loadRecords();
-    } catch {
+    } catch (e) {
+      console.error('[HydrationCard] Erro ao remover:', e);
       toast.error('Erro ao remover registro');
     }
   };
