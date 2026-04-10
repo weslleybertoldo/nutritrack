@@ -90,7 +90,9 @@ export default function LoginPage() {
       }
 
       if (data?.success) {
-        sessionStorage.setItem('admin_token', 'admin-authenticated');
+        const token = crypto.randomUUID();
+        sessionStorage.setItem('admin_token', token);
+        sessionStorage.setItem('admin_login_time', Date.now().toString());
         setShowAdminModal(false);
         navigate('/admin');
       } else {
