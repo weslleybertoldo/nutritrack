@@ -24,3 +24,4 @@ dist-ssr
 *.sw?
 *.keystore
 keystore_base64.txt
+.env*

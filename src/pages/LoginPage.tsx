@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase, SUPABASE_URL, SUPABASE_ANON_KEY } from '@/integrations/supabase/client';
 import { signInWithGoogle } from '@/lib/capacitorAuth';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
@@ -73,11 +73,11 @@ export default function LoginPage() {
     e.preventDefault();
     setAdminLoading(true);
     try {
-      const _res = await fetch('https://qyikubuqyhobppvojvpa.supabase.co/functions/v1/admin-api', {
+      const _res = await fetch(`${SUPABASE_URL}/functions/v1/admin-api`, {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF5aWt1YnVxeWhvYnBwdm9qdnBhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM5ODM5NDUsImV4cCI6MjA4OTU1OTk0NX0.YYhbW3KrkXtBDBb4Wpnvfrbl8hzb8-ixet54prpD6_U'
+          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
         },
         body: JSON.stringify({ action: 'login', username: adminUsername, password: adminPassword }),
       });
