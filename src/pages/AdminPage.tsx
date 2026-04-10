@@ -134,8 +134,12 @@ export default function AdminPage() {
 
   useEffect(() => {
     const token = sessionStorage.getItem('admin_token');
-    if (token === 'admin-authenticated') setIsAdmin(true);
-    else { setIsAdmin(false); navigate('/login'); }
+    const loginTime = sessionStorage.getItem('admin_login_time');
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    const isValidToken = token && token !== 'admin-authenticated' && uuidRegex.test(token);
+    const isValidTime = loginTime && (Date.now() - Number(loginTime)) < 24 * 60 * 60 * 1000;
+    if (isValidToken && isValidTime) setIsAdmin(true);
+    else { setIsAdmin(false); sessionStorage.removeItem('admin_token'); sessionStorage.removeItem('admin_login_time'); navigate('/login'); }
   }, [navigate]);
 
   const loadUsers = useCallback(async () => {
