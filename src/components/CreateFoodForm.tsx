@@ -65,14 +65,13 @@ export default function CreateFoodForm({ onCreated, initialBarcode, onExistingFo
     if (!file) return;
     setExtracting(true);
     try {
-      // Comprime a imagem para no máximo 800px e qualidade 0.6
-      // Fotos de celular chegam a 3MB+ — Gemini rejeita payloads grandes
+      // Comprime a imagem mantendo nitidez pra leitura de tabela nutricional
       const base64 = await new Promise<string>((resolve, reject) => {
         const img = new Image();
         const url = URL.createObjectURL(file);
         img.onload = () => {
           URL.revokeObjectURL(url);
-          const MAX = 800;
+          const MAX = 1200;  // Resolução maior pra manter texto legível
           let { width, height } = img;
           if (width > MAX || height > MAX) {
             if (width > height) { height = Math.round(height * MAX / width); width = MAX; }
@@ -84,7 +83,7 @@ export default function CreateFoodForm({ onCreated, initialBarcode, onExistingFo
           const ctx = canvas.getContext('2d');
           if (!ctx) { reject(new Error('Canvas context unavailable')); return; }
           ctx.drawImage(img, 0, 0, width, height);
-          const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.85);  // Qualidade alta pra texto
           resolve(dataUrl.split(',')[1]);
         };
         img.onerror = reject;

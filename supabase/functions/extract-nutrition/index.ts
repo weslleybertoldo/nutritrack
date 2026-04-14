@@ -54,20 +54,7 @@ serve(async (req) => {
     const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
     if (!GEMINI_API_KEY) throw new Error("GEMINI_API_KEY is not configured");
 
-    const prompt = `You are a nutrition label reader. Analyze the image of a nutrition facts table and return ONLY a valid JSON object with these fields:
-nome (product name if visible, or null),
-calorias_por_100 (number or null),
-proteina_por_100 (number or null),
-carbo_por_100 (number or null),
-acucares_por_100 (number or null),
-gordura_por_100 (number or null),
-gordura_saturada_por_100 (number or null),
-gordura_trans_por_100 (number or null),
-fibras_por_100 (number or null),
-sodio_por_100 (number or null),
-colesterol_por_100 (number or null),
-potassio_por_100 (number or null).
-Values should be per 100g or 100ml. If the label shows values per serving, convert to per 100g/ml. Use null for fields not found. Return ONLY the JSON, no other text.`;
+    const prompt = `Read this nutrition label image. Return a JSON object (no markdown, no backticks) with: {"nome":string|null,"calorias_por_100":number|null,"proteina_por_100":number|null,"carbo_por_100":number|null,"acucares_por_100":number|null,"gordura_por_100":number|null,"gordura_saturada_por_100":number|null,"gordura_trans_por_100":number|null,"fibras_por_100":number|null,"sodio_por_100":number|null,"colesterol_por_100":number|null,"potassio_por_100":number|null}. Convert values to per 100g/ml. Use null if not found. ONLY the JSON object, nothing else.`;
 
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
@@ -90,7 +77,7 @@ Values should be per 100g or 100ml. If the label shows values per serving, conve
           ],
           generationConfig: {
             temperature: 0.1,
-            maxOutputTokens: 512,
+            maxOutputTokens: 1024,
           },
         }),
       }
@@ -113,17 +100,34 @@ Values should be per 100g or 100ml. If the label shows values per serving, conve
 
     let nutritionData;
     try {
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      // Remove markdown code blocks (```json ... ```)
+      let cleaned = content.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
+      const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         nutritionData = JSON.parse(jsonMatch[0]);
       } else {
-        throw new Error("No JSON found");
+        throw new Error("No JSON found in response");
       }
-    } catch {
-      return new Response(
-        JSON.stringify({ error: "Could not parse nutrition data", raw: content }),
-        { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    } catch (parseErr) {
+      // Tenta parse parcial: se JSON truncado, completa com nulls
+      try {
+        let cleaned = content.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
+        const partial = cleaned.match(/\{[\s\S]*/);
+        if (partial) {
+          // Fecha campos abertos e o objeto
+          let fix = partial[0].replace(/,\s*$/, "") + "}";
+          // Remove trailing incomplete key-value pairs
+          fix = fix.replace(/,\s*"[^"]*":\s*$/, "}");
+          nutritionData = JSON.parse(fix);
+        } else {
+          throw parseErr;
+        }
+      } catch {
+        return new Response(
+          JSON.stringify({ error: "Could not parse nutrition data", raw: content.slice(0, 300) }),
+          { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
     }
 
     return new Response(JSON.stringify({ success: true, data: nutritionData }), {
