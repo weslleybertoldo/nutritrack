@@ -68,13 +68,13 @@ jobs:
       - name: Rename APK
         run: |
           APK=$(find android/app/build/outputs/apk/release -name "*.apk" | head -1)
-          mv "$APK" android/app/build/outputs/apk/release/NutriTrack.apk
+          mv "$APK" "android/app/build/outputs/apk/release/NutriTrack-v${{ steps.version.outputs.current }}.apk"
 
       - name: Upload APK as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: NutriTrack
-          path: android/app/build/outputs/apk/release/NutriTrack.apk
+          name: NutriTrack-v${{ steps.version.outputs.current }}
+          path: android/app/build/outputs/apk/release/NutriTrack-v${{ steps.version.outputs.current }}.apk
           retention-days: 30
 
       - name: Create GitHub Release
@@ -85,8 +85,8 @@ jobs:
           body: |
             ## NutriTrack v${{ steps.version.outputs.current }}
             APK gerado automaticamente.
-            **Download:** Baixe o `NutriTrack.apk` abaixo.
-          files: android/app/build/outputs/apk/release/NutriTrack.apk
+            **Download:** Baixe o `NutriTrack-v${{ steps.version.outputs.current }}.apk` abaixo.
+          files: android/app/build/outputs/apk/release/NutriTrack-v${{ steps.version.outputs.current }}.apk
           generate_release_notes: true
           make_latest: true
 
