@@ -133,13 +133,40 @@ export default function AdminPage() {
   const [editPlanColor, setEditPlanColor] = useState('');
 
   useEffect(() => {
-    const token = sessionStorage.getItem('admin_token');
-    const loginTime = sessionStorage.getItem('admin_login_time');
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-    const isValidToken = token && token !== 'admin-authenticated' && uuidRegex.test(token);
-    const isValidTime = loginTime && (Date.now() - Number(loginTime)) < 24 * 60 * 60 * 1000;
-    if (isValidToken && isValidTime) setIsAdmin(true);
-    else { setIsAdmin(false); sessionStorage.removeItem('admin_token'); sessionStorage.removeItem('admin_login_time'); navigate('/login'); }
+    const verifyAdmin = async () => {
+      const token = sessionStorage.getItem('admin_token');
+      const ts = sessionStorage.getItem('admin_login_time');
+      const sig = sessionStorage.getItem('admin_token_sig');
+
+      if (!token || !ts || !sig) {
+        setIsAdmin(false); navigate('/login'); return;
+      }
+
+      // Verificar expiração (24h)
+      if (Date.now() - Number(ts) > 24 * 60 * 60 * 1000) {
+        sessionStorage.removeItem('admin_token');
+        sessionStorage.removeItem('admin_login_time');
+        sessionStorage.removeItem('admin_token_sig');
+        setIsAdmin(false); navigate('/login'); return;
+      }
+
+      // Verificar assinatura HMAC
+      try {
+        const secret = import.meta.env.VITE_SUPABASE_ANON_KEY || 'nutritrack-admin-secret';
+        const encoder = new TextEncoder();
+        const key = await crypto.subtle.importKey('raw', encoder.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+        const expected = await crypto.subtle.sign('HMAC', key, encoder.encode(`${token}:${ts}`));
+        const expectedHex = Array.from(new Uint8Array(expected)).map(b => b.toString(16).padStart(2, '0')).join('');
+        if (expectedHex !== sig) {
+          setIsAdmin(false); navigate('/login'); return;
+        }
+      } catch {
+        setIsAdmin(false); navigate('/login'); return;
+      }
+
+      setIsAdmin(true);
+    };
+    verifyAdmin();
   }, [navigate]);
 
   const loadUsers = useCallback(async () => {
@@ -170,6 +197,7 @@ export default function AdminPage() {
   const viewUser = async (userId: string) => {
     try {
       const data = await adminFetch('get_user', { user_id: userId });
+      if (!data?.profile) { toast.error('Perfil não encontrado'); return; }
       setSelectedUser(data);
       setEditProfile({ ...data.profile });
       setUserPlanId(data.profile.plano_id || '');

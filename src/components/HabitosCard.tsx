@@ -76,10 +76,10 @@ export default function HabitosCard({ selectedDate }: HabitosCardProps) {
         .select('id, nome, ordem')
         .single()
         .then(({ data, error }) => {
-          if (error) { console.warn('Erro ao criar hábito padrão:', error.message); return; }
+          if (error) { console.warn('[HabitosCard] Erro ao criar hábito padrão:', error.message); return; }
           if (data) setHabitos([data as Habito]);
         })
-        .catch(e => console.warn('[HabitosCard] Erro ao criar hábito padrão:', e));
+        .catch(e => console.error('[HabitosCard] Erro inesperado ao criar hábito padrão:', e));
     }
   }, [loading, habitos.length, user]);
 

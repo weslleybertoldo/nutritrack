@@ -88,9 +88,9 @@ export default function AddFoodModal({ mealId, onClose }: AddFoodModalProps) {
         setBarcodeForCreate(code);
         setShowCreateFood(true);
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error('[AddFoodModal] Erro ao buscar por código:', e);
-      toast.error('Erro ao buscar alimento. Tente novamente.');
+      toast.error(e?.message || 'Erro ao buscar alimento. Tente novamente.');
     }
   }, [searchFoodByBarcode]);
 

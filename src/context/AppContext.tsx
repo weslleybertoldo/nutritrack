@@ -477,38 +477,30 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const addRecentFood = useCallback(async (foodId: string, quantidade: number = 100) => {
     if (!user) return;
     try {
-      const { data: existing, error: existingError } = await supabase
-        .from('recent_foods').select('id').eq('user_id', user.id).eq('food_id', foodId).maybeSingle();
-      if (existingError) throw existingError;
+      // Upsert único em vez de select+insert/update separados (evita race condition)
+      const { error: upsertError } = await supabase
+        .from('recent_foods')
+        .upsert(
+          { user_id: user.id, food_id: foodId, quantidade, usado_em: new Date().toISOString() } as any,
+          { onConflict: 'user_id,food_id' }
+        );
+      if (upsertError) throw upsertError;
 
-      if (existing) {
-        const { error: updateError } = await supabase.from('recent_foods').update({ usado_em: new Date().toISOString(), quantidade } as any).eq('id', existing.id);
-        if (updateError) throw updateError;
-      } else {
-        const { error: insertError } = await supabase.from('recent_foods').insert({ user_id: user.id, food_id: foodId, quantidade } as any);
-        if (insertError) throw insertError;
-      }
-
-      // Cleanup: mantém apenas os 20 mais recentes
-      const { data: allRecents, error: recentsError } = await supabase
-        .from('recent_foods').select('id').eq('user_id', user.id).order('usado_em', { ascending: false });
-      if (recentsError) throw recentsError;
-      if (allRecents && allRecents.length > 20) {
-        const idsToDelete = allRecents.slice(20).map(r => r.id);
-        const { error: deleteError } = await supabase.from('recent_foods').delete().in('id', idsToDelete);
-        if (deleteError) throw deleteError;
-      }
-
-      // Atualiza lista de recentes no estado
+      // Cleanup: mantém apenas os 20 mais recentes + atualiza estado
       const { data: freshRecents, error: freshError } = await supabase
-        .from('recent_foods').select('food_id, quantidade').eq('user_id', user.id)
-        .order('usado_em', { ascending: false }).limit(20);
+        .from('recent_foods').select('id, food_id, quantidade').eq('user_id', user.id)
+        .order('usado_em', { ascending: false }).limit(30);
       if (freshError) throw freshError;
+      if (freshRecents && freshRecents.length > 20) {
+        const idsToDelete = freshRecents.slice(20).map(r => r.id);
+        await supabase.from('recent_foods').delete().in('id', idsToDelete);
+      }
       if (freshRecents) {
+        const top20 = freshRecents.slice(0, 20);
         setState(s => ({
           ...s,
-          recentFoods: freshRecents.map(f => f.food_id),
-          recentFoodsWithQty: freshRecents.map(f => ({ food_id: f.food_id, quantidade: (f as any).quantidade ?? 100 })),
+          recentFoods: top20.map(f => f.food_id),
+          recentFoodsWithQty: top20.map(f => ({ food_id: f.food_id, quantidade: (f as any).quantidade ?? 100 })),
         }));
       }
     } catch (err: any) {

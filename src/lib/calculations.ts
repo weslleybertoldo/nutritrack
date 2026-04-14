@@ -42,7 +42,10 @@ export function calcularPercentualGordura3Dobras(
     densidadeCorporal = 1.0994921 - 0.0009929 * soma + 0.0000023 * soma * soma - 0.0001392 * idade;
   }
 
-  return (495 / densidadeCorporal) - 450;
+  // Guard contra valores impossíveis (input inválido → densidade fora do range biológico)
+  if (densidadeCorporal <= 0.9 || densidadeCorporal > 1.2) return 0;
+  const pct = (495 / densidadeCorporal) - 450;
+  return Math.max(0, Math.min(100, pct));
 }
 
 export function calcularComposicaoCorporal(peso: number, percentualGordura: number) {
@@ -89,10 +92,13 @@ export function calcularMacros(profile: Profile, metaFinal: number) {
 
   const totalKcal = proteinaKcal + gorduraKcal + carboKcal;
 
+  // Guard contra divisão por zero quando meta calórica é 0
+  const safePct = (val: number) => totalKcal > 0 ? Math.round((val / totalKcal) * 100) : 0;
+
   return {
-    proteina: { g: proteinaG, kcal: proteinaKcal, pct: Math.round((proteinaKcal / totalKcal) * 100) },
-    gordura: { g: gorduraG, kcal: gorduraKcal, pct: Math.round((gorduraKcal / totalKcal) * 100) },
-    carbo: { g: carboG, kcal: carboKcal, pct: Math.round((carboKcal / totalKcal) * 100) },
+    proteina: { g: proteinaG, kcal: proteinaKcal, pct: safePct(proteinaKcal) },
+    gordura: { g: gorduraG, kcal: gorduraKcal, pct: safePct(gorduraKcal) },
+    carbo: { g: carboG, kcal: carboKcal, pct: safePct(carboKcal) },
     totalKcal,
   };
 }
