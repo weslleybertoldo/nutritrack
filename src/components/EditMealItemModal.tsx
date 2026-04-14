@@ -90,7 +90,7 @@ export default function EditMealItemModal({ item, onSave, onRemove, onClose }: E
               value={[quantidadeNum || 10]}
               onValueChange={([v]) => setQuantidadeStr(String(v))}
               min={10}
-              max={500}
+              max={Math.max(500, Math.ceil(quantidadeNum * 1.5 / 10) * 10)}
               step={5}
               className="w-full"
             />

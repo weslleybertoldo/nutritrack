@@ -88,9 +88,10 @@ export default function DiaryPage() {
     const defaults = REFEICOES_PADRAO.map((tipo, i) => ({
       user_id: user.id, tipo, ordem: i, ativo: true,
     }));
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('user_meal_config').insert(defaults)
       .select('id, tipo, nome_personalizado, ordem');
+    if (error) { console.warn('Erro ao criar config padrão:', error.message); return; }
     if (data) setMealConfig(data as MealConfigItem[]);
   };
 
@@ -162,6 +163,7 @@ export default function DiaryPage() {
     else { d1 = profile.dc_tricipital || 0; d2 = profile.dc_suprailiaca || 0; d3 = profile.dc_coxa || 0; }
     if (d1 === 0 && d2 === 0 && d3 === 0) return null;
     const pct = calcularPercentualGordura3Dobras(profile.sexo, idade, { d1, d2, d3 });
+    if (!Number.isFinite(pct) || pct <= 0 || pct > 100) return null;
     const comp = calcularComposicaoCorporal(profile.peso, pct);
     return { pct: pct.toFixed(1), ...comp };
   }, [profile]);

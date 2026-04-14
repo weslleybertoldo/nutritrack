@@ -234,13 +234,13 @@ export async function syncPendingOperations(): Promise<{
       if (!session) {
         const { data: { session: refreshed } } = await supabase.auth.refreshSession();
         if (!refreshed) {
-          // Sem sessão — guarda operações e tenta na próxima vez (sem alarmar)
-          return { synced: 0, failed: 0 };
+          console.warn('[OfflineSync] Sem sessão válida — operações permanecem na fila');
+          return { synced: 0, failed: ops.length };
         }
       }
-    } catch {
-      // Sem conexão pra validar sessão — não arrisca perder dados
-      return { synced: 0, failed: 0 };
+    } catch (err) {
+      console.warn('[OfflineSync] Erro ao validar sessão:', err);
+      return { synced: 0, failed: ops.length };
     }
 
     // Compacta fila antes de enviar (remove operações redundantes)

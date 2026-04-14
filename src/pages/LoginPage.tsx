@@ -91,8 +91,16 @@ export default function LoginPage() {
 
       if (data?.success) {
         const token = crypto.randomUUID();
+        const ts = Date.now().toString();
+        // Assina token com HMAC para impedir falsificação via DevTools
+        const secret = import.meta.env.VITE_SUPABASE_ANON_KEY || 'nutritrack-admin-secret';
+        const encoder = new TextEncoder();
+        const key = await crypto.subtle.importKey('raw', encoder.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+        const sig = await crypto.subtle.sign('HMAC', key, encoder.encode(`${token}:${ts}`));
+        const sigHex = Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, '0')).join('');
         sessionStorage.setItem('admin_token', token);
-        sessionStorage.setItem('admin_login_time', Date.now().toString());
+        sessionStorage.setItem('admin_login_time', ts);
+        sessionStorage.setItem('admin_token_sig', sigHex);
         setShowAdminModal(false);
         navigate('/admin');
       } else {

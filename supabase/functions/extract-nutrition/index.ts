@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -8,6 +9,38 @@ const corsHeaders = {
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+
+  // Verificar autenticação JWT
+  const authHeader = req.headers.get("authorization");
+  if (!authHeader?.startsWith("Bearer ")) {
+    return new Response(JSON.stringify({ error: "Token de autenticação necessário" }), {
+      status: 401,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  // Rejeita anon key (apenas usuários logados podem usar extração por foto)
+  const token = authHeader.replace("Bearer ", "");
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+  if (token === anonKey) {
+    return new Response(JSON.stringify({ error: "Autenticação de usuário necessária" }), {
+      status: 401,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  const supabase = createClient(
+    Deno.env.get("SUPABASE_URL") ?? "",
+    anonKey,
+    { global: { headers: { Authorization: authHeader } } }
+  );
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) {
+    return new Response(JSON.stringify({ error: "Token inválido ou expirado" }), {
+      status: 401,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
 
   try {
     const { imageBase64 } = await req.json();
@@ -37,7 +70,7 @@ potassio_por_100 (number or null).
 Values should be per 100g or 100ml. If the label shows values per serving, convert to per 100g/ml. Use null for fields not found. Return ONLY the JSON, no other text.`;
 
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -72,7 +105,7 @@ Values should be per 100g or 100ml. If the label shows values per serving, conve
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      throw new Error(`Gemini API error: ${response.status}`);
+      throw new Error(`Gemini API returned ${response.status}: ${t}`);
     }
 
     const data = await response.json();

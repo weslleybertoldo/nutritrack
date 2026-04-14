@@ -83,55 +83,59 @@ export default function NutritionSummaryModal({
     if (tab !== 'semana') return;
     const loadWeek = async () => {
       setLoadingWeek(true);
-      const dates: string[] = [];
-      for (let i = 6; i >= 0; i--) {
-        const d = new Date(selectedDate + 'T12:00:00');
-        d.setDate(d.getDate() - i);
-        dates.push(formatDate(d));
-      }
-
-      const { data: mealsData, error: mealsError } = await supabase
-        .from('meals').select('id, data').eq('user_id', userId)
-        .in('data', dates);
-
-      if (mealsError) { console.warn('Erro ao carregar semana (meals):', mealsError.message); setLoadingWeek(false); return; }
-      if (!mealsData || mealsData.length === 0) {
-        setWeekData(dates.map(date => ({
-          date, label: new Date(date + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'short' }).slice(0, 3),
-          calorias: 0, proteina: 0, carbo: 0, gordura: 0,
-        })));
-        setLoadingWeek(false);
-        return;
-      }
-
-      const mealIds = mealsData.map(m => m.id);
-      const { data: items, error: itemsError } = await supabase
-        .from('meal_items').select('meal_id, calorias_calculadas, proteina, carbo, gordura')
-        .in('meal_id', mealIds);
-      if (itemsError) { console.warn('Erro ao carregar semana (items):', itemsError.message); setLoadingWeek(false); return; }
-
-      const mealDateMap: Record<string, string> = {};
-      mealsData.forEach(m => { mealDateMap[m.id] = m.data; });
-
-      const dailyTotals: Record<string, { calorias: number; proteina: number; carbo: number; gordura: number }> = {};
-      dates.forEach(d => { dailyTotals[d] = { calorias: 0, proteina: 0, carbo: 0, gordura: 0 }; });
-
-      (items || []).forEach((item: any) => {
-        const date = mealDateMap[item.meal_id];
-        if (date && dailyTotals[date]) {
-          dailyTotals[date].calorias += item.calorias_calculadas;
-          dailyTotals[date].proteina += item.proteina;
-          dailyTotals[date].carbo += item.carbo;
-          dailyTotals[date].gordura += item.gordura;
+      try {
+        const dates: string[] = [];
+        for (let i = 6; i >= 0; i--) {
+          const d = new Date(selectedDate + 'T12:00:00');
+          d.setDate(d.getDate() - i);
+          dates.push(formatDate(d));
         }
-      });
 
-      setWeekData(dates.map(date => ({
-        date,
-        label: new Date(date + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'short' }).slice(0, 3),
-        ...dailyTotals[date],
-      })));
-      setLoadingWeek(false);
+        const { data: mealsData, error: mealsError } = await supabase
+          .from('meals').select('id, data').eq('user_id', userId)
+          .in('data', dates);
+
+        if (mealsError) { console.warn('Erro ao carregar semana (meals):', mealsError.message); return; }
+        if (!mealsData || mealsData.length === 0) {
+          setWeekData(dates.map(date => ({
+            date, label: new Date(date + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'short' }).slice(0, 3),
+            calorias: 0, proteina: 0, carbo: 0, gordura: 0,
+          })));
+          return;
+        }
+
+        const mealIds = mealsData.map(m => m.id);
+        const { data: items, error: itemsError } = await supabase
+          .from('meal_items').select('meal_id, calorias_calculadas, proteina, carbo, gordura')
+          .in('meal_id', mealIds);
+        if (itemsError) { console.warn('Erro ao carregar semana (items):', itemsError.message); return; }
+
+        const mealDateMap: Record<string, string> = {};
+        mealsData.forEach(m => { mealDateMap[m.id] = m.data; });
+
+        const dailyTotals: Record<string, { calorias: number; proteina: number; carbo: number; gordura: number }> = {};
+        dates.forEach(d => { dailyTotals[d] = { calorias: 0, proteina: 0, carbo: 0, gordura: 0 }; });
+
+        (items || []).forEach((item: any) => {
+          const date = mealDateMap[item.meal_id];
+          if (date && dailyTotals[date]) {
+            dailyTotals[date].calorias += item.calorias_calculadas;
+            dailyTotals[date].proteina += item.proteina;
+            dailyTotals[date].carbo += item.carbo;
+            dailyTotals[date].gordura += item.gordura;
+          }
+        });
+
+        setWeekData(dates.map(date => ({
+          date,
+          label: new Date(date + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'short' }).slice(0, 3),
+          ...dailyTotals[date],
+        })));
+      } catch (e) {
+        console.error('[NutritionSummary] Erro ao carregar semana:', e);
+      } finally {
+        setLoadingWeek(false);
+      }
     };
     loadWeek();
   }, [tab, userId, selectedDate]);

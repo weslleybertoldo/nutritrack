@@ -128,10 +128,12 @@ export async function signInWithGoogle(): Promise<{ error?: string }> {
       // Escuta o deep link
       listenerHandle = App.addListener("appUrlOpen", handleUrl);
 
-      // Limpa apenas este listener após resolução
-      sessionPromise.then(() => {
-        if (listenerHandle) {
-          listenerHandle.remove();
+      // Limpa listener após resolução (awaited para evitar leak)
+      sessionPromise.then(async () => {
+        try {
+          if (listenerHandle) await listenerHandle.remove();
+        } catch {
+          // Listener já removido ou app fechando
         }
       });
     });

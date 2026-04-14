@@ -17,7 +17,14 @@ function getCachedSession(): Session | null {
   try {
     const raw = localStorage.getItem(SESSION_KEY);
     if (!raw) return null;
-    return JSON.parse(raw) as Session;
+    const session = JSON.parse(raw) as Session;
+    // Valida que a sessão tem campos obrigatórios e não expirou
+    if (!session?.user?.id || !session?.access_token) return null;
+    if (session.expires_at && session.expires_at * 1000 < Date.now()) {
+      localStorage.removeItem(SESSION_KEY);
+      return null;
+    }
+    return session;
   } catch {
     return null;
   }
