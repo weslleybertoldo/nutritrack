@@ -96,7 +96,9 @@ export default function CreateFoodForm({ onCreated, initialBarcode, onExistingFo
       });
 
       if (error || !data?.success) {
-        toast.error('Não foi possível ler a tabela. Preencha manualmente.');
+        const detail = error?.message || data?.error || 'Erro desconhecido';
+        console.error('[PhotoExtract] error:', error, 'data:', data);
+        toast.error(`Não foi possível ler a tabela: ${detail}`);
         return;
       }
 
@@ -124,8 +126,9 @@ export default function CreateFoodForm({ onCreated, initialBarcode, onExistingFo
         potassio: fromPer100(d.potassio_por_100) ?? f.potassio,
       }));
       toast.success('Dados extraídos com sucesso!');
-    } catch {
-      toast.error('Não foi possível ler a tabela. Preencha manualmente.');
+    } catch (err: any) {
+      console.error('[PhotoExtract] catch:', err);
+      toast.error(`Erro na extração: ${err?.message || 'erro desconhecido'}`);
     } finally {
       setExtracting(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
