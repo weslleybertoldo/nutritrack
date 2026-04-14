@@ -91,6 +91,9 @@ export default function CreateFoodForm({ onCreated, initialBarcode, onExistingFo
         img.src = url;
       });
 
+      // Garante token fresco antes de chamar Edge Function (JWT expira em 1h)
+      await supabase.auth.refreshSession();
+
       const { data, error } = await supabase.functions.invoke('extract-nutrition', {
         body: { imageBase64: base64 },
       });
