@@ -92,16 +92,32 @@ export default function CreateFoodForm({ onCreated, initialBarcode, onExistingFo
       });
 
       // Garante token fresco antes de chamar Edge Function (JWT expira em 1h)
-      await supabase.auth.refreshSession();
+      const { data: { session } } = await supabase.auth.refreshSession();
+      const token = session?.access_token;
+      if (!token) {
+        toast.error('Sessão expirada. Faça login novamente.');
+        return;
+      }
 
-      const { data, error } = await supabase.functions.invoke('extract-nutrition', {
-        body: { imageBase64: base64 },
+      // Fetch direto (não usa SDK invoke que esconde erros)
+      const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+      const ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/extract-nutrition`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': ANON_KEY,
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ imageBase64: base64 }),
       });
 
-      if (error || !data?.success) {
-        const detail = error?.message || data?.error || 'Erro desconhecido';
-        console.error('[PhotoExtract] error:', error, 'data:', data);
-        toast.error(`Não foi possível ler a tabela: ${detail}`);
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok || !data?.success) {
+        const detail = data?.error || `HTTP ${res.status}`;
+        console.error('[PhotoExtract] status:', res.status, 'body:', data);
+        toast.error(`Erro ao ler tabela: ${detail}`);
         return;
       }
 
