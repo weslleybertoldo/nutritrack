@@ -10,14 +10,13 @@ jobs:
   ping-supabase:
     runs-on: ubuntu-latest
     steps:
-      - name: Check project status (prevents pause)
+      - name: Send health ping to prevent pause
         run: |
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+          # Management API check - ativa o projeto
+          RESPONSE=$(curl -s -w "\n%{http_code}" \
             -H "Authorization: Bearer ${{ secrets.SUPABASE_PAT }}" \
             "https://api.supabase.com/v1/projects/qyikubuqyhobppvojvpa")
-          echo "Project status: $STATUS"
-          if [ "$STATUS" -eq 200 ]; then
-            echo "Project is active"
-          else
-            echo "Warning: Could not verify project status"
-          fi
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          echo "Project status check: HTTP $HTTP_CODE"
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "NutriTrack project is healthy and active"
