@@ -1,0 +1,20 @@
+name: Keep Supabase Active
+
+on:
+  schedule:
+    # Run every 6 days at 9am UTC
+    - cron: '0 9 */6 * *'
+  workflow_dispatch:
+
+jobs:
+  ping-supabase:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping NutriTrack database
+        run: |
+          curl -s -o /dev/null -w "%{http_code}" \
+            -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}" \
+            "${{ secrets.SUPABASE_REST_URL }}/rest/v1/?select=*&limit=1"
+        env:
+          SUPABASE_REST_URL: "https://qyikubuqyhobppvojvpa.supabase.co"
