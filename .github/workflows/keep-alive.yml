@@ -12,7 +12,6 @@ jobs:
     steps:
       - name: Send health ping to prevent pause
         run: |
-          # Management API check - ativa o projeto
           RESPONSE=$(curl -s -w "\n%{http_code}" \
             -H "Authorization: Bearer ${{ secrets.SUPABASE_PAT }}" \
             "https://api.supabase.com/v1/projects/qyikubuqyhobppvojvpa")
@@ -20,3 +19,6 @@ jobs:
           echo "Project status check: HTTP $HTTP_CODE"
           if [ "$HTTP_CODE" = "200" ]; then
             echo "NutriTrack project is healthy and active"
+          else
+            echo "Warning: Unexpected response code"
+          fi
