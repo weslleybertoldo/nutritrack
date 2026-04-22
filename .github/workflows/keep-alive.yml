@@ -2,19 +2,22 @@ name: Keep Supabase Active
 
 on:
   schedule:
-    # Run every 6 days at 9am UTC
-    - cron: '0 9 */6 * *'
+    # Run every 5 days at 9am UTC (antes do limite de 7 dias)
+    - cron: '0 9 */5 * *'
   workflow_dispatch:
 
 jobs:
   ping-supabase:
     runs-on: ubuntu-latest
     steps:
-      - name: Ping NutriTrack database
+      - name: Check project status (prevents pause)
         run: |
-          curl -s -o /dev/null -w "%{http_code}" \
-            -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
-            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}" \
-            "${{ secrets.SUPABASE_REST_URL }}/rest/v1/?select=*&limit=1"
-        env:
-          SUPABASE_REST_URL: "https://qyikubuqyhobppvojvpa.supabase.co"
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_PAT }}" \
+            "https://api.supabase.com/v1/projects/qyikubuqyhobppvojvpa")
+          echo "Project status: $STATUS"
+          if [ "$STATUS" -eq 200 ]; then
+            echo "Project is active"
+          else
+            echo "Warning: Could not verify project status"
+          fi
