@@ -48,11 +48,10 @@ export default function AddFoodModal({ mealId, onClose }: AddFoodModalProps) {
 
   const favoriteFoods = useMemo(() => foods.filter(f => favorites.includes(f.id)), [foods, favorites]);
   const recentFoodList = useMemo(() =>
-    recentFoodsWithQty.map(r => {
-      const food = foods.find(f => f.id === r.food_id);
-      return food ? { food, quantidade: r.quantidade } : null;
-    }).filter(Boolean) as { food: Food; quantidade: number }[],
-    [foods, recentFoodsWithQty]
+    recentFoodsWithQty
+      .filter(r => r.food)
+      .map(r => ({ food: r.food, quantidade: r.quantidade })),
+    [recentFoodsWithQty]
   );
 
   const handleAdd = () => {

@@ -27,6 +27,7 @@ const defaultProfile: Profile = {
 interface RecentFoodWithQty {
   food_id: string;
   quantidade: number;
+  food: Food;
 }
 
 interface AppState {
@@ -251,7 +252,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!user) return;
     const cacheKey = `nutritrack_recent_foods_${user.id}`;
-    supabase.from('recent_foods').select('food_id, quantidade').eq('user_id', user.id)
+    supabase.from('recent_foods').select('food_id, quantidade, food:foods(*)').eq('user_id', user.id)
       .order('usado_em', { ascending: false }).limit(20).then(({ data, error }) => {
         if (error) {
           console.error('Erro ao carregar recentes:', error.message);
@@ -260,8 +261,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
           return;
         }
         if (data) {
-          const recentFoods = data.map(f => f.food_id);
-          const recentFoodsWithQty = data.map(f => ({ food_id: f.food_id, quantidade: (f as any).quantidade ?? 100 }));
+          const withFood = data.filter(f => (f as any).food) as any[];
+          const recentFoods = withFood.map(f => f.food_id);
+          const recentFoodsWithQty = withFood.map(f => ({ food_id: f.food_id, quantidade: f.quantidade ?? 100, food: f.food as Food }));
           setCacheData(cacheKey, { recentFoods, recentFoodsWithQty });
           setState(s => ({ ...s, recentFoods, recentFoodsWithQty }));
         }
@@ -488,7 +490,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       // Cleanup: mantém apenas os 20 mais recentes + atualiza estado
       const { data: freshRecents, error: freshError } = await supabase
-        .from('recent_foods').select('id, food_id, quantidade').eq('user_id', user.id)
+        .from('recent_foods').select('id, food_id, quantidade, food:foods(*)').eq('user_id', user.id)
         .order('usado_em', { ascending: false }).limit(30);
       if (freshError) throw freshError;
       if (freshRecents && freshRecents.length > 20) {
@@ -496,11 +498,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
         await supabase.from('recent_foods').delete().in('id', idsToDelete);
       }
       if (freshRecents) {
-        const top20 = freshRecents.slice(0, 20);
+        const top20 = (freshRecents as any[]).slice(0, 20).filter(f => f.food);
         setState(s => ({
           ...s,
           recentFoods: top20.map(f => f.food_id),
-          recentFoodsWithQty: top20.map(f => ({ food_id: f.food_id, quantidade: (f as any).quantidade ?? 100 })),
+          recentFoodsWithQty: top20.map(f => ({ food_id: f.food_id, quantidade: f.quantidade ?? 100, food: f.food as Food })),
         }));
       }
     } catch (err: any) {
@@ -512,14 +514,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!user) return;
     try {
       const { data, error } = await supabase
-        .from('recent_foods').select('food_id, quantidade').eq('user_id', user.id)
+        .from('recent_foods').select('food_id, quantidade, food:foods(*)').eq('user_id', user.id)
         .order('usado_em', { ascending: false }).limit(20);
       if (error) throw error;
-      if (data) setState(s => ({
-        ...s,
-        recentFoods: data.map(f => f.food_id),
-        recentFoodsWithQty: data.map(f => ({ food_id: f.food_id, quantidade: (f as any).quantidade ?? 100 })),
-      }));
+      if (data) {
+        const withFood = (data as any[]).filter(f => f.food);
+        setState(s => ({
+          ...s,
+          recentFoods: withFood.map(f => f.food_id),
+          recentFoodsWithQty: withFood.map(f => ({ food_id: f.food_id, quantidade: f.quantidade ?? 100, food: f.food as Food })),
+        }));
+      }
     } catch (err: any) {
       console.error('Erro ao atualizar recentes:', err?.message);
     }
