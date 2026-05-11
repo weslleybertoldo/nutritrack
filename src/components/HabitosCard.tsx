@@ -71,15 +71,22 @@ export default function HabitosCard({ selectedDate }: HabitosCardProps) {
   // Inicializa com creatina se não tiver nenhum
   useEffect(() => {
     if (!loading && habitos.length === 0 && user) {
-      supabase.from('habitos')
-        .insert({ user_id: user.id, nome: 'Creatina', ordem: 0, ativo: true })
-        .select('id, nome, ordem')
-        .single()
-        .then(({ data, error }) => {
+      let cancelled = false;
+      (async () => {
+        try {
+          const { data, error } = await supabase.from('habitos')
+            .insert({ user_id: user.id, nome: 'Creatina', ordem: 0, ativo: true })
+            .select('id, nome, ordem')
+            .single();
+          if (cancelled) return;
           if (error) { console.warn('[HabitosCard] Erro ao criar hábito padrão:', error.message); return; }
           if (data) setHabitos([data as Habito]);
-        })
-        .catch(e => console.error('[HabitosCard] Erro inesperado ao criar hábito padrão:', e));
+        } catch (e) {
+          if (cancelled) return;
+          console.error('[HabitosCard] Erro inesperado ao criar hábito padrão:', e);
+        }
+      })();
+      return () => { cancelled = true; };
     }
   }, [loading, habitos.length, user]);
 

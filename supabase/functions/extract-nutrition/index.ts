@@ -43,9 +43,30 @@ serve(async (req) => {
   }
 
   try {
-    const { imageBase64 } = await req.json();
-    if (!imageBase64) {
+    const body = await req.json().catch(() => null);
+    if (!body || typeof body !== "object") {
+      return new Response(JSON.stringify({ error: "Invalid JSON body" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const { imageBase64 } = body as { imageBase64?: unknown };
+    if (typeof imageBase64 !== "string" || imageBase64.length === 0) {
       return new Response(JSON.stringify({ error: "No image provided" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    // Limita 8MB base64 (~6MB binario) — protege custo Gemini + abuso
+    if (imageBase64.length > 8 * 1024 * 1024) {
+      return new Response(JSON.stringify({ error: "Imagem muito grande (max ~6MB)" }), {
+        status: 413,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    // Valida charset base64 (rejeita binario cru / payload malicioso)
+    if (!/^[A-Za-z0-9+/=\s]+$/.test(imageBase64)) {
+      return new Response(JSON.stringify({ error: "imageBase64 inválido (não é base64)" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });

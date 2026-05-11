@@ -32,7 +32,7 @@ export default function NutritionTable({ food, quantidade }: NutritionTableProps
       <div className="divide-y divide-border">
         {rows.map((row, i) => (
           <div
-            key={i}
+            key={row.label}
             className={`flex items-center justify-between px-3 py-1.5 text-sm font-body ${
               row.indent ? 'pl-6 text-muted-foreground' : ''
             } ${i === 0 ? 'font-semibold' : ''}`}

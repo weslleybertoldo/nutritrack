@@ -150,7 +150,7 @@ export default function RecipeModal({ recipe, foods, onSave, onClose }: RecipeMo
             <div className="space-y-2">
               <p className="text-xs text-muted-foreground font-medium">Alimentos na receita:</p>
               {itens.map((item, i) => (
-                <div key={i} className="flex items-center gap-2 rounded-lg border border-border bg-secondary/30 p-2">
+                <div key={`${item.food_id}-${i}`} className="flex items-center gap-2 rounded-lg border border-border bg-secondary/30 p-2">
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-body truncate">{item.food.nome}</p>
                   </div>

@@ -136,9 +136,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
             meta_colesterol: data.meta_colesterol ?? 300,
             meta_potassio: data.meta_potassio ?? 3500,
             tema: (data.tema as Profile['tema']) || 'system',
-            user_code: (data as any).user_code ?? undefined,
-            admin_locked: (data as any).admin_locked ?? true,
-            blocked: (data as any).blocked ?? false,
+            user_code: (data as Record<string, unknown>).user_code as number | undefined ?? undefined,
+            admin_locked: (data as Record<string, unknown>).admin_locked as boolean | undefined ?? true,
+            blocked: (data as Record<string, unknown>).blocked as boolean | undefined ?? false,
           };
           setCacheData(cacheKey, profileData);
           setState(s => ({ ...s, profile: profileData, profileLoaded: true }));
@@ -231,24 +231,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!user) return;
     let cancelled = false;
     const cacheKey = `nutritrack_favorites_${user.id}`;
-    supabase.from('favorites').select('food_id').eq('user_id', user.id).then(({ data, error }) => {
-      if (cancelled) return;
-      if (error) {
-        console.error('Erro ao carregar favoritos:', error.message);
+    (async () => {
+      try {
+        const { data, error } = await supabase.from('favorites').select('food_id').eq('user_id', user.id);
+        if (cancelled) return;
+        if (error) {
+          console.error('Erro ao carregar favoritos:', error.message);
+          const cached = getCacheData<string[]>(cacheKey);
+          if (cached) setState(s => ({ ...s, favorites: cached }));
+          return;
+        }
+        if (data) {
+          const favIds = data.map(f => f.food_id);
+          setCacheData(cacheKey, favIds);
+          setState(s => ({ ...s, favorites: favIds }));
+        }
+      } catch {
+        if (cancelled) return;
         const cached = getCacheData<string[]>(cacheKey);
         if (cached) setState(s => ({ ...s, favorites: cached }));
-        return;
       }
-      if (data) {
-        const favIds = data.map(f => f.food_id);
-        setCacheData(cacheKey, favIds);
-        setState(s => ({ ...s, favorites: favIds }));
-      }
-    }).catch(() => {
-      if (cancelled) return;
-      const cached = getCacheData<string[]>(cacheKey);
-      if (cached) setState(s => ({ ...s, favorites: cached }));
-    });
+    })();
     return () => { cancelled = true; };
   }, [user]);
 
@@ -257,8 +260,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!user) return;
     let cancelled = false;
     const cacheKey = `nutritrack_recent_foods_${user.id}`;
-    supabase.from('recent_foods').select('food_id, quantidade, food:foods(*)').eq('user_id', user.id)
-      .order('usado_em', { ascending: false }).limit(20).then(({ data, error }) => {
+    (async () => {
+      try {
+        const { data, error } = await supabase.from('recent_foods').select('food_id, quantidade, food:foods(*)').eq('user_id', user.id)
+          .order('usado_em', { ascending: false }).limit(20);
         if (cancelled) return;
         if (error) {
           console.error('Erro ao carregar recentes:', error.message);
@@ -267,17 +272,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
           return;
         }
         if (data) {
-          const withFood = data.filter(f => (f as any).food) as any[];
+          type RecentRow = { food_id: string; quantidade: number | null; food: Food | null };
+          const withFood = (data as unknown as RecentRow[]).filter(f => f.food !== null) as Array<RecentRow & { food: Food }>;
           const recentFoods = withFood.map(f => f.food_id);
-          const recentFoodsWithQty = withFood.map(f => ({ food_id: f.food_id, quantidade: f.quantidade ?? 100, food: f.food as Food }));
+          const recentFoodsWithQty = withFood.map(f => ({ food_id: f.food_id, quantidade: f.quantidade ?? 100, food: f.food }));
           setCacheData(cacheKey, { recentFoods, recentFoodsWithQty });
           setState(s => ({ ...s, recentFoods, recentFoodsWithQty }));
         }
-      }).catch(() => {
+      } catch {
         if (cancelled) return;
         const cached = getCacheData<{ recentFoods: string[]; recentFoodsWithQty: RecentFoodWithQty[] }>(cacheKey);
         if (cached) setState(s => ({ ...s, ...cached }));
-      });
+      }
+    })();
     return () => { cancelled = true; };
   }, [user]);
 
@@ -291,15 +298,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
     // Supabase fora do setState
     if (user && newProfile) {
-      const { id, user_id, created_at, updated_at, ...profileData } = newProfile as any;
-      supabase.from('profiles').update(profileData).eq('user_id', user.id).then(({ error }) => {
-        if (error) {
-          toast.error('Erro ao salvar perfil');
+      const { id, user_id, created_at, updated_at, ...profileData } = newProfile as Profile & Record<string, unknown>;
+      void id; void user_id; void created_at; void updated_at;
+      (async () => {
+        try {
+          const { error } = await supabase.from('profiles').update(profileData).eq('user_id', user.id);
+          if (error) {
+            toast.error('Erro ao salvar perfil');
+            addPendingOperation('profiles', 'update', profileData, undefined, { user_id: user.id });
+          }
+        } catch {
           addPendingOperation('profiles', 'update', profileData, undefined, { user_id: user.id });
         }
-      }).catch(() => {
-        addPendingOperation('profiles', 'update', profileData, undefined, { user_id: user.id });
-      });
+      })();
     }
   }, [user]);
 

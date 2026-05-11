@@ -750,7 +750,7 @@ export default function AdminPage() {
                   const height = maxCal > 0 ? (d.calorias / maxCal) * 100 : 0;
                   const dayName = new Date(d.date + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'short' }).slice(0, 3);
                   return (
-                    <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                    <div key={d.date} className="flex-1 flex flex-col items-center gap-1">
                       <span className="text-[9px] text-muted-foreground">{Math.round(d.calorias)}</span>
                       <div className="w-full flex items-end" style={{ height: '80px' }}>
                         <div

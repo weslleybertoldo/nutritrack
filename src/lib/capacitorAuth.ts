@@ -41,12 +41,11 @@ export async function signInWithGoogle(): Promise<{ error?: string }> {
     }
 
     // 2. Configura listener para capturar o deep link ANTES de abrir o browser
+    let listenerHandle: { remove: () => Promise<void> } | null = null;
     const sessionPromise = new Promise<{ error?: string }>((resolve) => {
       const timeout = setTimeout(() => {
         resolve({ error: "Login cancelado ou expirado" });
       }, 120000); // 2 min timeout
-
-      let listenerHandle: { remove: () => Promise<void> } | null = null;
 
       const handleUrl = async (event: { url: string }) => {
         if (!event.url.startsWith(REDIRECT_SCHEME)) return;
@@ -125,24 +124,23 @@ export async function signInWithGoogle(): Promise<{ error?: string }> {
         } catch {}
       };
 
-      // Escuta o deep link
-      listenerHandle = App.addListener("appUrlOpen", handleUrl);
-
-      // Limpa listener após resolução (awaited para evitar leak)
-      sessionPromise.then(async () => {
-        try {
-          if (listenerHandle) await listenerHandle.remove();
-        } catch {
-          // Listener já removido ou app fechando
-        }
+      // Escuta o deep link (addListener é assíncrono em Capacitor 5+)
+      App.addListener("appUrlOpen", handleUrl).then((handle) => {
+        listenerHandle = handle;
       });
     });
 
     // 3. Abre o browser com a URL do OAuth
     await Browser.open({ url: data.url, windowName: "_self" });
 
-    // 4. Espera o resultado
-    return await sessionPromise;
+    // 4. Espera o resultado e limpa listener
+    try {
+      return await sessionPromise;
+    } finally {
+      try {
+        if (listenerHandle) await listenerHandle.remove();
+      } catch {}
+    }
   } catch (e) {
     return { error: "Erro ao abrir login do Google" };
   }
