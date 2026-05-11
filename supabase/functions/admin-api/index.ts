@@ -24,8 +24,13 @@ function b64UrlDecode(s: string): Uint8Array {
   for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
   return out;
 }
-async function hmacKey(secret: string): Promise<CryptoKey> {
-  return await crypto.subtle.importKey("raw", enc.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"]);
+// CryptoKey cacheada por secret — evita re-importKey a cada request.
+let _hmacKeyCache: { secret: string; promise: Promise<CryptoKey> } | null = null;
+function hmacKey(secret: string): Promise<CryptoKey> {
+  if (_hmacKeyCache && _hmacKeyCache.secret === secret) return _hmacKeyCache.promise;
+  const promise = crypto.subtle.importKey("raw", enc.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"]);
+  _hmacKeyCache = { secret, promise };
+  return promise;
 }
 async function signJWT(payload: Record<string, unknown>, secret: string): Promise<string> {
   const header = b64UrlEncodeStr(JSON.stringify({ alg: "HS256", typ: "JWT" }));
@@ -45,7 +50,10 @@ async function verifyJWT(token: string, secret: string): Promise<Record<string, 
     const ok = await crypto.subtle.verify("HMAC", key, b64UrlDecode(sig), enc.encode(data));
     if (!ok) return null;
     const payload = JSON.parse(dec.decode(b64UrlDecode(body))) as Record<string, unknown>;
-    if (typeof payload.exp === "number" && Date.now() / 1000 > payload.exp) return null;
+    // Defesa em profundidade: exige claims minimas (sem isso, tokens sem exp seriam "eternos").
+    if (typeof payload.exp !== "number" || Date.now() / 1000 > payload.exp) return null;
+    if (typeof payload.iat !== "number") return null;
+    if (payload.sub !== "admin") return null;
     return payload;
   } catch {
     return null;
