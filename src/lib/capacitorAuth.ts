@@ -41,13 +41,13 @@ export async function signInWithGoogle(): Promise<{ error?: string }> {
     }
 
     // 2. Configura listener para capturar o deep link ANTES de abrir o browser
-    let listenerHandle: { remove: () => Promise<void> } | null = null;
+    let resolveSession!: (v: { error?: string }) => void;
     const sessionPromise = new Promise<{ error?: string }>((resolve) => {
-      const timeout = setTimeout(() => {
-        resolve({ error: "Login cancelado ou expirado" });
-      }, 120000); // 2 min timeout
+      resolveSession = resolve;
+    });
+    const timeout = setTimeout(() => resolveSession({ error: "Login cancelado ou expirado" }), 120000);
 
-      const handleUrl = async (event: { url: string }) => {
+    const handleUrl = async (event: { url: string }) => {
         if (!event.url.startsWith(REDIRECT_SCHEME)) return;
 
         clearTimeout(timeout);
@@ -59,7 +59,7 @@ export async function signInWithGoogle(): Promise<{ error?: string }> {
           const hashPart = url.includes("#") ? url.split("#")[1] : url.split("?")[1];
 
           if (!hashPart) {
-            resolve({ error: "Resposta de login inválida" });
+            resolveSession({ error: "Resposta de login inválida" });
             return;
           }
 
@@ -74,7 +74,7 @@ export async function signInWithGoogle(): Promise<{ error?: string }> {
             });
 
             if (sessionError) {
-              resolve({ error: sessionError.message });
+              resolveSession({ error: sessionError.message });
             } else {
               // Força buscar user completo (com user_metadata, avatar_url, etc)
               const { data: { user } } = await supabase.auth.getUser();
@@ -107,15 +107,15 @@ export async function signInWithGoogle(): Promise<{ error?: string }> {
                 }
               }
 
-              resolve({});
+              resolveSession({});
             }
           } else {
             // Pode ter retornado com error
             const errorDesc = params.get("error_description") || params.get("error");
-            resolve({ error: errorDesc || "Tokens não recebidos" });
+            resolveSession({ error: errorDesc || "Tokens não recebidos" });
           }
         } catch (e) {
-          resolve({ error: "Erro ao processar login" });
+          resolveSession({ error: "Erro ao processar login" });
         }
 
         // Fecha o browser
@@ -124,21 +124,21 @@ export async function signInWithGoogle(): Promise<{ error?: string }> {
         } catch {}
       };
 
-      // Escuta o deep link (addListener é assíncrono em Capacitor 5+)
-      App.addListener("appUrlOpen", handleUrl).then((handle) => {
-        listenerHandle = handle;
-      });
-    });
+    // Registra listener ANTES de abrir o browser e aguarda a Promise do handle
+    // (Capacitor 5+: addListener é async — sem await aqui haveria race no cleanup).
+    const handlePromise = App.addListener("appUrlOpen", handleUrl);
 
     // 3. Abre o browser com a URL do OAuth
     await Browser.open({ url: data.url, windowName: "_self" });
 
-    // 4. Espera o resultado e limpa listener
+    // 4. Espera o resultado e SEMPRE limpa o listener (await da Promise do handle)
     try {
       return await sessionPromise;
     } finally {
+      clearTimeout(timeout);
       try {
-        if (listenerHandle) await listenerHandle.remove();
+        const handle = await handlePromise;
+        await handle.remove();
       } catch {}
     }
   } catch (e) {

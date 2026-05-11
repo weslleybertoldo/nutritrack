@@ -4,11 +4,17 @@ import { X, Search, Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface RecipeItemDraft {
+  draft_id: string;
   food_id: string;
   food: Food;
   quantidade: number;
   quantidadeStr: string;
 }
+
+const newDraftId = () =>
+  typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `draft-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
 interface RecipeModalProps {
   recipe: Recipe | null;
@@ -23,6 +29,7 @@ export default function RecipeModal({ recipe, foods, onSave, onClose }: RecipeMo
   const [itens, setItens] = useState<RecipeItemDraft[]>(() => {
     if (recipe?.items) {
       return recipe.items.filter(i => i.food).map(i => ({
+        draft_id: newDraftId(),
         food_id: i.food_id,
         food: i.food!,
         quantidade: i.quantidade,
@@ -54,7 +61,7 @@ export default function RecipeModal({ recipe, foods, onSave, onClose }: RecipeMo
   }, [itens]);
 
   const addItem = (food: Food) => {
-    setItens(prev => [...prev, { food_id: food.id, food, quantidade: 100, quantidadeStr: '100' }]);
+    setItens(prev => [...prev, { draft_id: newDraftId(), food_id: food.id, food, quantidade: 100, quantidadeStr: '100' }]);
     setBusca('');
   };
 
@@ -150,7 +157,7 @@ export default function RecipeModal({ recipe, foods, onSave, onClose }: RecipeMo
             <div className="space-y-2">
               <p className="text-xs text-muted-foreground font-medium">Alimentos na receita:</p>
               {itens.map((item, i) => (
-                <div key={`${item.food_id}-${i}`} className="flex items-center gap-2 rounded-lg border border-border bg-secondary/30 p-2">
+                <div key={item.draft_id} className="flex items-center gap-2 rounded-lg border border-border bg-secondary/30 p-2">
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-body truncate">{item.food.nome}</p>
                   </div>
