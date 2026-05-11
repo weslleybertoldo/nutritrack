@@ -98,8 +98,10 @@ export default function LoginPage() {
       } else {
         toast.error('Erro ao conectar com o servidor');
       }
-    } catch (err: any) {
-      toast.error(err.message || 'Erro na autenticação');
+    } catch (err) {
+      // Network/fetch error — não expõe err.message técnico ("Failed to fetch")
+      console.error('[AdminLogin] erro de rede:', err);
+      toast.error('Erro ao conectar com o servidor');
     } finally {
       setAdminLoading(false);
     }
