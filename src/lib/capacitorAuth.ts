@@ -128,11 +128,10 @@ export async function signInWithGoogle(): Promise<{ error?: string }> {
     // (Capacitor 5+: addListener é async — sem await aqui haveria race no cleanup).
     const handlePromise = App.addListener("appUrlOpen", handleUrl);
 
-    // 3. Abre o browser com a URL do OAuth
-    await Browser.open({ url: data.url, windowName: "_self" });
-
-    // 4. Espera o resultado e SEMPRE limpa o listener (await da Promise do handle)
+    // 3 + 4. Abre browser, espera resultado e SEMPRE limpa listener+timeout,
+    // mesmo se Browser.open lançar (impede acumular handlers/timeouts em retries).
     try {
+      await Browser.open({ url: data.url, windowName: "_self" });
       return await sessionPromise;
     } finally {
       clearTimeout(timeout);
