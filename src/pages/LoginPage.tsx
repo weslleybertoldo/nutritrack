@@ -93,7 +93,11 @@ export default function LoginPage() {
         const token = crypto.randomUUID();
         const ts = Date.now().toString();
         // Assina token com HMAC para impedir falsificação via DevTools
-        const secret = import.meta.env.VITE_SUPABASE_ANON_KEY || 'nutritrack-admin-secret';
+        const secret = import.meta.env.VITE_SUPABASE_ANON_KEY;
+        if (!secret) {
+          toast.error('Config inválida: VITE_SUPABASE_ANON_KEY ausente');
+          return;
+        }
         const encoder = new TextEncoder();
         const key = await crypto.subtle.importKey('raw', encoder.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
         const sig = await crypto.subtle.sign('HMAC', key, encoder.encode(`${token}:${ts}`));
