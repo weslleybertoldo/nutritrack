@@ -45,14 +45,14 @@ serve(async (req) => {
   try {
     const body = await req.json().catch(() => null);
     if (!body || typeof body !== "object") {
-      return new Response(JSON.stringify({ error: "Invalid JSON body" }), {
+      return new Response(JSON.stringify({ error: "Corpo da requisição inválido (JSON esperado)" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
     const { imageBase64 } = body as { imageBase64?: unknown };
     if (typeof imageBase64 !== "string" || imageBase64.length === 0) {
-      return new Response(JSON.stringify({ error: "No image provided" }), {
+      return new Response(JSON.stringify({ error: "Imagem não enviada" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -108,7 +108,7 @@ serve(async (req) => {
       const t = await response.text();
       console.error("Gemini API error:", response.status, t);
       if (response.status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limit exceeded. Try again later." }), {
+        return new Response(JSON.stringify({ error: "Limite de uso excedido. Tente novamente mais tarde." }), {
           status: 429,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
@@ -145,7 +145,7 @@ serve(async (req) => {
         }
       } catch {
         return new Response(
-          JSON.stringify({ error: "Could not parse nutrition data", raw: content.slice(0, 300) }),
+          JSON.stringify({ error: "Não foi possível interpretar a tabela nutricional", raw: content.slice(0, 300) }),
           { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
