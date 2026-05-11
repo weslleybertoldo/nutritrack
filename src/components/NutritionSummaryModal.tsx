@@ -49,38 +49,44 @@ export default function NutritionSummaryModal({
   });
 
   useEffect(() => {
+    let cancelled = false;
     const loadMicros = async () => {
       try {
         const { data: mealsData, error: mealsError } = await supabase.from('meals').select('id').eq('user_id', userId).eq('data', selectedDate);
+        if (cancelled) return;
         if (mealsError) { console.warn('Erro ao carregar micros (meals):', mealsError.message); return; }
         if (!mealsData || mealsData.length === 0) return;
         const mealIds = mealsData.map(m => m.id);
         const { data: items, error: itemsError } = await supabase.from('meal_items').select('quantidade, food:foods(*)').in('meal_id', mealIds);
+        if (cancelled) return;
         if (itemsError) { console.warn('Erro ao carregar micros (items):', itemsError.message); return; }
         if (!items) return;
 
         const totals = { fibras: 0, sodio: 0, acucares: 0, gordura_saturada: 0, colesterol: 0, potassio: 0 };
-        items.forEach((item: any) => {
+        type MealItemRow = { quantidade: number; food: Record<string, number | null> | null };
+        (items as unknown as MealItemRow[]).forEach((item) => {
           if (!item.food) return;
           const f = item.quantidade / 100;
-          totals.fibras += (item.food.fibras_por_100 || 0) * f;
-          totals.sodio += (item.food.sodio_por_100 || 0) * f;
-          totals.acucares += (item.food.acucares_por_100 || 0) * f;
-          totals.gordura_saturada += (item.food.gordura_saturada_por_100 || 0) * f;
-          totals.colesterol += (item.food.colesterol_por_100 || 0) * f;
-          totals.potassio += (item.food.potassio_por_100 || 0) * f;
+          totals.fibras += (Number(item.food.fibras_por_100) || 0) * f;
+          totals.sodio += (Number(item.food.sodio_por_100) || 0) * f;
+          totals.acucares += (Number(item.food.acucares_por_100) || 0) * f;
+          totals.gordura_saturada += (Number(item.food.gordura_saturada_por_100) || 0) * f;
+          totals.colesterol += (Number(item.food.colesterol_por_100) || 0) * f;
+          totals.potassio += (Number(item.food.potassio_por_100) || 0) * f;
         });
-        setMicroTotals(totals);
+        if (!cancelled) setMicroTotals(totals);
       } catch (e) {
-        console.error('[NutritionSummary] Erro ao carregar micros:', e);
+        if (!cancelled) console.error('[NutritionSummary] Erro ao carregar micros:', e);
       }
     };
     loadMicros();
+    return () => { cancelled = true; };
   }, [userId, selectedDate]);
 
   // Load week data
   useEffect(() => {
     if (tab !== 'semana') return;
+    let cancelled = false;
     const loadWeek = async () => {
       setLoadingWeek(true);
       try {
@@ -94,6 +100,7 @@ export default function NutritionSummaryModal({
         const { data: mealsData, error: mealsError } = await supabase
           .from('meals').select('id, data').eq('user_id', userId)
           .in('data', dates);
+        if (cancelled) return;
 
         if (mealsError) { console.warn('Erro ao carregar semana (meals):', mealsError.message); return; }
         if (!mealsData || mealsData.length === 0) {
@@ -108,6 +115,7 @@ export default function NutritionSummaryModal({
         const { data: items, error: itemsError } = await supabase
           .from('meal_items').select('meal_id, calorias_calculadas, proteina, carbo, gordura')
           .in('meal_id', mealIds);
+        if (cancelled) return;
         if (itemsError) { console.warn('Erro ao carregar semana (items):', itemsError.message); return; }
 
         const mealDateMap: Record<string, string> = {};
@@ -116,7 +124,8 @@ export default function NutritionSummaryModal({
         const dailyTotals: Record<string, { calorias: number; proteina: number; carbo: number; gordura: number }> = {};
         dates.forEach(d => { dailyTotals[d] = { calorias: 0, proteina: 0, carbo: 0, gordura: 0 }; });
 
-        (items || []).forEach((item: any) => {
+        type WeekItem = { meal_id: string; calorias_calculadas: number; proteina: number; carbo: number; gordura: number };
+        ((items || []) as unknown as WeekItem[]).forEach((item) => {
           const date = mealDateMap[item.meal_id];
           if (date && dailyTotals[date]) {
             dailyTotals[date].calorias += item.calorias_calculadas;
@@ -126,18 +135,19 @@ export default function NutritionSummaryModal({
           }
         });
 
-        setWeekData(dates.map(date => ({
+        if (!cancelled) setWeekData(dates.map(date => ({
           date,
           label: new Date(date + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'short' }).slice(0, 3),
           ...dailyTotals[date],
         })));
       } catch (e) {
-        console.error('[NutritionSummary] Erro ao carregar semana:', e);
+        if (!cancelled) console.error('[NutritionSummary] Erro ao carregar semana:', e);
       } finally {
-        setLoadingWeek(false);
+        if (!cancelled) setLoadingWeek(false);
       }
     };
     loadWeek();
+    return () => { cancelled = true; };
   }, [tab, userId, selectedDate]);
 
   const calProgress = metaFinal > 0 ? Math.min((summary.calorias / metaFinal) * 100, 100) : 0;
@@ -300,8 +310,8 @@ export default function NutritionSummaryModal({
                         dataKey="value"
                         stroke="none"
                       >
-                        {donutData.map((_, i) => (
-                          <Cell key={i} fill={totalMacroG > 0 ? DONUT_COLORS[i] : 'hsl(var(--muted))'} />
+                        {donutData.map((d, i) => (
+                          <Cell key={d.name} fill={totalMacroG > 0 ? DONUT_COLORS[i] : 'hsl(var(--muted))'} />
                         ))}
                       </Pie>
                     </PieChart>
@@ -400,8 +410,8 @@ export default function NutritionSummaryModal({
                       <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
                           <Pie data={weekDonutData} cx="50%" cy="50%" innerRadius={30} outerRadius={50} paddingAngle={2} dataKey="value" stroke="none">
-                            {weekDonutData.map((_, i) => (
-                              <Cell key={i} fill={weekTotalMacroG > 0 ? DONUT_COLORS[i] : 'hsl(var(--muted))'} />
+                            {weekDonutData.map((d, i) => (
+                              <Cell key={d.name} fill={weekTotalMacroG > 0 ? DONUT_COLORS[i] : 'hsl(var(--muted))'} />
                             ))}
                           </Pie>
                         </PieChart>

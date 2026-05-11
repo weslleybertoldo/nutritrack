@@ -35,8 +35,8 @@ export function useAppLifecycle(onResume?: () => void) {
     });
 
     return () => {
-      stateListener.then((l) => l.remove());
-      backListener.then((l) => l.remove());
+      stateListener.then((l) => l.remove()).catch((e) => console.warn('[useAppLifecycle] erro ao remover stateListener:', e));
+      backListener.then((l) => l.remove()).catch((e) => console.warn('[useAppLifecycle] erro ao remover backListener:', e));
     };
   }, [onResume]);
 }
