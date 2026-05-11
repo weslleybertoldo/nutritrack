@@ -89,22 +89,9 @@ export default function LoginPage() {
         return;
       }
 
-      if (data?.success) {
-        const token = crypto.randomUUID();
-        const ts = Date.now().toString();
-        // Assina token com HMAC para impedir falsificação via DevTools
-        const secret = import.meta.env.VITE_SUPABASE_ANON_KEY;
-        if (!secret) {
-          toast.error('Config inválida: VITE_SUPABASE_ANON_KEY ausente');
-          return;
-        }
-        const encoder = new TextEncoder();
-        const key = await crypto.subtle.importKey('raw', encoder.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-        const sig = await crypto.subtle.sign('HMAC', key, encoder.encode(`${token}:${ts}`));
-        const sigHex = Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, '0')).join('');
-        sessionStorage.setItem('admin_token', token);
-        sessionStorage.setItem('admin_login_time', ts);
-        sessionStorage.setItem('admin_token_sig', sigHex);
+      if (data?.success && typeof data.token === 'string') {
+        // Token JWT HS256 assinado pelo servidor com ADMIN_JWT_SECRET (env Supabase).
+        sessionStorage.setItem('admin_token', data.token);
         setShowAdminModal(false);
         navigate('/admin');
       } else {
