@@ -1,3 +1,4 @@
+import { Suspense, lazy } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes, Navigate } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
@@ -9,15 +10,16 @@ import { ThemeProvider } from "@/context/ThemeContext";
 import { useOfflineSync } from "@/hooks/useOfflineSync";
 import { useAppLifecycle } from "@/hooks/useAppLifecycle";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import DiaryPage from "./pages/DiaryPage";
-import ProfilePage from "./pages/ProfilePage";
-import GoalsPage from "./pages/GoalsPage";
-import SettingsPage from "./pages/SettingsPage";
-import LoginPage from "./pages/LoginPage";
-import AdminPage from "./pages/AdminPage";
 import InstallBanner from "./components/InstallBanner";
-import NotFound from "./pages/NotFound";
 import { setupDeepLinkListener } from "@/lib/capacitorAuth";
+
+const DiaryPage = lazy(() => import("./pages/DiaryPage"));
+const ProfilePage = lazy(() => import("./pages/ProfilePage"));
+const GoalsPage = lazy(() => import("./pages/GoalsPage"));
+const SettingsPage = lazy(() => import("./pages/SettingsPage"));
+const LoginPage = lazy(() => import("./pages/LoginPage"));
+const AdminPage = lazy(() => import("./pages/AdminPage"));
+const NotFound = lazy(() => import("./pages/NotFound"));
 
 setupDeepLinkListener();
 
@@ -71,15 +73,21 @@ function AppRoutes() {
   }
 
   return (
-    <Routes>
-      <Route path="/login" element={user ? <Navigate to="/" replace /> : <LoginPage />} />
-      <Route path="/admin" element={<AdminPage />} />
-      <Route path="/" element={<ProtectedRoute><DiaryPage /></ProtectedRoute>} />
-      <Route path="/perfil" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
-      <Route path="/metas" element={<ProtectedRoute><GoalsPage /></ProtectedRoute>} />
-      <Route path="/configuracoes" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
-      <Route path="*" element={<NotFound />} />
-    </Routes>
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+      </div>
+    }>
+      <Routes>
+        <Route path="/login" element={user ? <Navigate to="/" replace /> : <LoginPage />} />
+        <Route path="/admin" element={<AdminPage />} />
+        <Route path="/" element={<ProtectedRoute><DiaryPage /></ProtectedRoute>} />
+        <Route path="/perfil" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
+        <Route path="/metas" element={<ProtectedRoute><GoalsPage /></ProtectedRoute>} />
+        <Route path="/configuracoes" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+    </Suspense>
   );
 }
 

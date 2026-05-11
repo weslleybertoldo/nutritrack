@@ -229,8 +229,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // ── FAVORITES ─────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!user) return;
+    let cancelled = false;
     const cacheKey = `nutritrack_favorites_${user.id}`;
     supabase.from('favorites').select('food_id').eq('user_id', user.id).then(({ data, error }) => {
+      if (cancelled) return;
       if (error) {
         console.error('Erro ao carregar favoritos:', error.message);
         const cached = getCacheData<string[]>(cacheKey);
@@ -243,17 +245,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setState(s => ({ ...s, favorites: favIds }));
       }
     }).catch(() => {
+      if (cancelled) return;
       const cached = getCacheData<string[]>(cacheKey);
       if (cached) setState(s => ({ ...s, favorites: cached }));
     });
+    return () => { cancelled = true; };
   }, [user]);
 
   // ── RECENT FOODS ──────────────────────────────────────────────────────────
   useEffect(() => {
     if (!user) return;
+    let cancelled = false;
     const cacheKey = `nutritrack_recent_foods_${user.id}`;
     supabase.from('recent_foods').select('food_id, quantidade, food:foods(*)').eq('user_id', user.id)
       .order('usado_em', { ascending: false }).limit(20).then(({ data, error }) => {
+        if (cancelled) return;
         if (error) {
           console.error('Erro ao carregar recentes:', error.message);
           const cached = getCacheData<{ recentFoods: string[]; recentFoodsWithQty: RecentFoodWithQty[] }>(cacheKey);
@@ -268,9 +274,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
           setState(s => ({ ...s, recentFoods, recentFoodsWithQty }));
         }
       }).catch(() => {
+        if (cancelled) return;
         const cached = getCacheData<{ recentFoods: string[]; recentFoodsWithQty: RecentFoodWithQty[] }>(cacheKey);
         if (cached) setState(s => ({ ...s, ...cached }));
       });
+    return () => { cancelled = true; };
   }, [user]);
 
   // ── SET PROFILE ───────────────────────────────────────────────────────────

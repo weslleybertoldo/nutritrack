@@ -152,7 +152,10 @@ export default function AdminPage() {
 
       // Verificar assinatura HMAC
       try {
-        const secret = import.meta.env.VITE_SUPABASE_ANON_KEY || 'nutritrack-admin-secret';
+        const secret = import.meta.env.VITE_SUPABASE_ANON_KEY;
+        if (!secret) {
+          setIsAdmin(false); navigate('/login'); return;
+        }
         const encoder = new TextEncoder();
         const key = await crypto.subtle.importKey('raw', encoder.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
         const expected = await crypto.subtle.sign('HMAC', key, encoder.encode(`${token}:${ts}`));
