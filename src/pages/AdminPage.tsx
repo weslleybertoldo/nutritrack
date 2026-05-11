@@ -135,39 +135,26 @@ export default function AdminPage() {
   useEffect(() => {
     const verifyAdmin = async () => {
       const token = sessionStorage.getItem('admin_token');
-      const ts = sessionStorage.getItem('admin_login_time');
-      const sig = sessionStorage.getItem('admin_token_sig');
-
-      if (!token || !ts || !sig) {
-        setIsAdmin(false); navigate('/login'); return;
-      }
-
-      // Verificar expiração (24h)
-      if (Date.now() - Number(ts) > 24 * 60 * 60 * 1000) {
-        sessionStorage.removeItem('admin_token');
-        sessionStorage.removeItem('admin_login_time');
-        sessionStorage.removeItem('admin_token_sig');
-        setIsAdmin(false); navigate('/login'); return;
-      }
-
-      // Verificar assinatura HMAC
+      if (!token) { setIsAdmin(false); navigate('/login'); return; }
       try {
-        const secret = import.meta.env.VITE_SUPABASE_ANON_KEY;
-        if (!secret) {
+        const res = await fetch(`${SUPABASE_URL}/functions/v1/admin-api`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+            'x-admin-token': token,
+          },
+          body: JSON.stringify({ action: 'verify' }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data?.valid) {
+          sessionStorage.removeItem('admin_token');
           setIsAdmin(false); navigate('/login'); return;
         }
-        const encoder = new TextEncoder();
-        const key = await crypto.subtle.importKey('raw', encoder.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-        const expected = await crypto.subtle.sign('HMAC', key, encoder.encode(`${token}:${ts}`));
-        const expectedHex = Array.from(new Uint8Array(expected)).map(b => b.toString(16).padStart(2, '0')).join('');
-        if (expectedHex !== sig) {
-          setIsAdmin(false); navigate('/login'); return;
-        }
+        setIsAdmin(true);
       } catch {
-        setIsAdmin(false); navigate('/login'); return;
+        setIsAdmin(false); navigate('/login');
       }
-
-      setIsAdmin(true);
     };
     verifyAdmin();
   }, [navigate]);
