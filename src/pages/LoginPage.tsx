@@ -81,21 +81,22 @@ export default function LoginPage() {
         },
         body: JSON.stringify({ action: 'login', username: adminUsername, password: adminPassword }),
       });
-      const data = await _res.json();
-      const error = _res.ok ? null : data;
+      const data = await _res.json().catch(() => ({}));
 
-      if (error) {
-        toast.error('Erro ao conectar com o servidor');
-        return;
-      }
-
-      if (data?.success && typeof data.token === 'string') {
+      if (_res.ok && data?.success && typeof data.token === 'string') {
         // Token JWT HS256 assinado pelo servidor com ADMIN_JWT_SECRET (env Supabase).
         sessionStorage.setItem('admin_token', data.token);
         setShowAdminModal(false);
         navigate('/admin');
-      } else {
+        return;
+      }
+
+      // 4xx: erro de autenticacao/validacao — mostra msg do backend.
+      // 5xx ou network: erro genérico de conexão.
+      if (_res.status >= 400 && _res.status < 500) {
         toast.error(data?.error || 'Credenciais inválidas');
+      } else {
+        toast.error('Erro ao conectar com o servidor');
       }
     } catch (err: any) {
       toast.error(err.message || 'Erro na autenticação');
