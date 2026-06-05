@@ -15,6 +15,7 @@ import HydrationCard from '@/components/HydrationCard';
 import HabitosCard from '@/components/HabitosCard';
 import { supabase } from '@/integrations/supabase/client';
 import UpdateChecker, { CURRENT_VERSION } from '@/components/UpdateChecker';
+import UpdateDownloadButton from '@/components/UpdateDownloadButton';
 
 interface MealConfigItem { id: string; tipo: string; nome_personalizado?: string; ordem: number; }
 
@@ -445,15 +446,7 @@ export default function DiaryPage() {
         {updateResult && (
           <div className="mt-1">
             {updateResult.hasUpdate ? (
-              <a
-                href={updateResult.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-[10px] font-semibold uppercase tracking-wider hover:bg-primary/90 transition-colors"
-              >
-                <Download size={10} />
-                Baixar v{updateResult.version}
-              </a>
+              <UpdateDownloadButton url={updateResult.url!} version={updateResult.version!} size="sm" />
             ) : (
               <p className="text-[10px] text-green-500 flex items-center justify-center gap-1">
                 <Check size={10} />

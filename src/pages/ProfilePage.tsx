@@ -6,6 +6,7 @@ import { Sexo } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Settings, RefreshCw, Check, Download, X } from 'lucide-react';
 import UpdateChecker, { CURRENT_VERSION } from '@/components/UpdateChecker';
+import UpdateDownloadButton from '@/components/UpdateDownloadButton';
 
 export default function ProfilePage() {
   const { profile, setProfile } = useApp();
@@ -298,15 +299,7 @@ export default function ProfilePage() {
                 {updateResult && (
                   <div className="mt-2">
                     {updateResult.hasUpdate ? (
-                      <a
-                        href={updateResult.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-xs font-semibold uppercase tracking-wider hover:bg-primary/90 transition-colors"
-                      >
-                        <Download size={12} />
-                        Baixar v{updateResult.version}
-                      </a>
+                      <UpdateDownloadButton url={updateResult.url!} version={updateResult.version!} size="md" />
                     ) : (
                       <p className="text-xs text-green-500 flex items-center justify-center gap-1">
                         <Check size={12} />
