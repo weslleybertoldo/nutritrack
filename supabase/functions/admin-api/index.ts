@@ -3,8 +3,15 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-admin-token, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+    "authorization, x-client-info, apikey, content-type, x-schema, x-admin-token, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
+
+// Ambiente: schema "public" (prod) ou "staging", resolvido por request via header x-schema.
+const _ALLOWED_SCHEMAS = ["public", "staging"];
+function resolveSchema(req: Request): string {
+  const h = (req.headers.get("x-schema") || "public").toLowerCase();
+  return _ALLOWED_SCHEMAS.includes(h) ? h : "public";
+}
 
 // ── HS256 JWT helpers (sem deps externas) ──────────────────────────────────
 const enc = new TextEncoder();
@@ -78,7 +85,7 @@ Deno.serve(async (req) => {
     if (!supabaseUrl || !serviceRoleKey || !adminJwtSecret || !adminUsername || !adminPassword) {
       return json({ error: "Configuração de servidor incompleta" }, 500);
     }
-    const supabase = createClient(supabaseUrl, serviceRoleKey);
+    const supabase = createClient(supabaseUrl, serviceRoleKey, { db: { schema: resolveSchema(req) as "public" } });
 
     let body: Record<string, unknown> = {};
     if (req.method === "POST") {

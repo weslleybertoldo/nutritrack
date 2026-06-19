@@ -3,6 +3,9 @@ import { createClient } from "@supabase/supabase-js";
 export const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 export const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
+// Schema do ambiente: "public" (prod) ou "staging". Dirige PostgREST e as edge functions (header x-schema).
+export const DB_SCHEMA = (import.meta.env.VITE_DB_SCHEMA as string) || "public";
+
 // Fetch com timeout e retry automático para todas as queries
 function createResilientFetch(retries = 2, timeout = 15000) {
   return async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
@@ -52,7 +55,9 @@ function createResilientFetch(retries = 2, timeout = 15000) {
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   global: {
     fetch: createResilientFetch(2, 15000),
+    headers: { "x-schema": DB_SCHEMA },
   },
+  db: { schema: DB_SCHEMA as "public" },
   auth: {
     persistSession: true,
     autoRefreshToken: true,

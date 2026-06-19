@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
-import { supabase, SUPABASE_URL, SUPABASE_ANON_KEY } from '@/integrations/supabase/client';
+import { supabase, SUPABASE_URL, SUPABASE_ANON_KEY, DB_SCHEMA } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -49,7 +49,7 @@ async function adminFetch(action: string, params?: Record<string, string>) {
   url.searchParams.set('action', action);
   if (params) Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
   const res = await fetch(url.toString(), {
-    headers: { 'Content-Type': 'application/json', 'x-admin-token': token, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` },
+    headers: { 'Content-Type': 'application/json', 'x-admin-token': token, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}`, 'x-schema': DB_SCHEMA },
   });
   const data = await res.json();
   if (data.error) throw new Error(data.error);
@@ -61,7 +61,7 @@ async function adminPost(action: string, body: Record<string, any>) {
   if (!token) throw new Error('Não autenticado');
   const res = await fetch(`${SUPABASE_URL}/functions/v1/admin-api`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-admin-token': token, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` },
+    headers: { 'Content-Type': 'application/json', 'x-admin-token': token, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}`, 'x-schema': DB_SCHEMA },
     body: JSON.stringify({ action, ...body }),
   });
   const data = await res.json();
@@ -141,7 +141,7 @@ export default function AdminPage() {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`, 'x-schema': DB_SCHEMA,
             'x-admin-token': token,
           },
           body: JSON.stringify({ action: 'verify' }),

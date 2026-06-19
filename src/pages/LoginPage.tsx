@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase, SUPABASE_URL, SUPABASE_ANON_KEY } from '@/integrations/supabase/client';
+import { supabase, SUPABASE_URL, SUPABASE_ANON_KEY, DB_SCHEMA } from '@/integrations/supabase/client';
 import { signInWithGoogle } from '@/lib/capacitorAuth';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
@@ -77,7 +77,7 @@ export default function LoginPage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`, 'x-schema': DB_SCHEMA
         },
         body: JSON.stringify({ action: 'login', username: adminUsername, password: adminPassword }),
       });
