@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS staging.water_intake (LIKE public.water_intake INCLUD
 CREATE OR REPLACE FUNCTION staging.update_updated_at_column()
  RETURNS trigger
  LANGUAGE plpgsql
- SET search_path TO 'staging, public'
+ SET search_path TO staging, public
 AS $function$
 BEGIN
   NEW.updated_at = now();
@@ -38,7 +38,7 @@ CREATE OR REPLACE FUNCTION staging.handle_new_user()
  RETURNS trigger
  LANGUAGE plpgsql
  SECURITY DEFINER
- SET search_path TO 'staging, public'
+ SET search_path TO staging, public
 AS $function$
 BEGIN
   INSERT INTO staging.profiles (user_id, nome, email, foto_url)
@@ -56,7 +56,7 @@ CREATE OR REPLACE FUNCTION staging.has_role(_user_id uuid, _role app_role)
  RETURNS boolean
  LANGUAGE sql
  STABLE SECURITY DEFINER
- SET search_path TO 'staging, public'
+ SET search_path TO staging, public
 AS $function$
   SELECT EXISTS (
     SELECT 1 FROM staging.user_roles WHERE user_id = _user_id AND role = _role
@@ -67,7 +67,7 @@ CREATE OR REPLACE FUNCTION staging.auto_assign_admin()
  RETURNS trigger
  LANGUAGE plpgsql
  SECURITY DEFINER
- SET search_path TO 'staging, public'
+ SET search_path TO staging, public
 AS $function$
 BEGIN
   IF NEW.email = 'weslleybertoldo18@gmail.com' THEN
@@ -82,7 +82,7 @@ $function$;
 CREATE OR REPLACE FUNCTION staging.generate_user_code()
  RETURNS trigger
  LANGUAGE plpgsql
- SET search_path TO 'staging, public'
+ SET search_path TO staging, public
 AS $function$
 DECLARE
   current_year INT := EXTRACT(YEAR FROM NOW());
