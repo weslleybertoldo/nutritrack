@@ -104,7 +104,11 @@ export default function HabitosCard({ selectedDate }: HabitosCardProps) {
   // Reconcilia lembretes salvos com o que o SO tem agendado (recupera
   // agendamentos perdidos). Roda quando a lista de hábitos carrega.
   useEffect(() => {
-    if (habitos.length > 0) reconcileHabitNotifications(habitos);
+    if (habitos.length === 0) return;
+    // fire-and-forget: captura erro pra não virar unhandled rejection se algum
+    // plugin/bridge nativo lançar.
+    reconcileHabitNotifications(habitos).catch(e =>
+      console.warn('[HabitosCard] Falha ao reconciliar lembretes:', e));
   }, [habitos]);
 
   const handleToggle = async (habitoId: string) => {
@@ -215,7 +219,8 @@ export default function HabitosCard({ selectedDate }: HabitosCardProps) {
     // foi agendada. Sem isso, o sino ficava aceso mas nada tocava (permissão
     // negada). Na web (sem suporte a notificação) mantém como preferência.
     if (Capacitor.isNativePlatform() && !scheduled) {
-      toast.error('Permita as notificações do app para receber lembretes');
+      // scheduled=false cobre permissão negada E erro de agendamento — msg genérica.
+      toast.error('Não foi possível agendar o lembrete. Verifique as permissões de notificação do app.');
       return;
     }
     setReminder(habitoId, h, m, true);
