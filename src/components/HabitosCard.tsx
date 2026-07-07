@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Plus, Check, Pencil, Trash2, X, Bell, BellOff } from 'lucide-react';
+import { Capacitor } from '@capacitor/core';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/context/AuthContext';
 import { toast } from 'sonner';
@@ -11,6 +12,7 @@ import {
   cancelHabitNotification,
   onHabitCompleted,
   createHabitReminderChannel,
+  reconcileHabitNotifications,
 } from '@/lib/habitReminders';
 
 interface Habito {
@@ -68,27 +70,42 @@ export default function HabitosCard({ selectedDate }: HabitosCardProps) {
   useEffect(() => { loadHabitos(); }, [loadHabitos]);
   useEffect(() => { loadConcluidos(); }, [loadConcluidos]);
 
-  // Inicializa com creatina se não tiver nenhum
+  // Inicializa com creatina se não tiver nenhum.
+  // Guard por user.id: roda no máximo 1x por usuário, mesmo que o objeto `user`
+  // ou `habitos` oscilem — evita inserts concorrentes de "Creatina" duplicada.
+  const initTriedForUser = useRef<string | null>(null);
   useEffect(() => {
-    if (!loading && habitos.length === 0 && user) {
-      let cancelled = false;
-      (async () => {
-        try {
-          const { data, error } = await supabase.from('habitos')
-            .insert({ user_id: user.id, nome: 'Creatina', ordem: 0, ativo: true })
-            .select('id, nome, ordem')
-            .single();
-          if (cancelled) return;
-          if (error) { console.warn('[HabitosCard] Erro ao criar hábito padrão:', error.message); return; }
-          if (data) setHabitos([data as Habito]);
-        } catch (e) {
-          if (cancelled) return;
-          console.error('[HabitosCard] Erro inesperado ao criar hábito padrão:', e);
+    if (loading || habitos.length > 0 || !user) return;
+    if (initTriedForUser.current === user.id) return;
+    initTriedForUser.current = user.id;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data, error } = await supabase.from('habitos')
+          .insert({ user_id: user.id, nome: 'Creatina', ordem: 0, ativo: true })
+          .select('id, nome, ordem')
+          .single();
+        if (cancelled) return;
+        if (error) {
+          // 23505 = já existe (corrida): apenas recarrega em vez de duplicar
+          console.warn('[HabitosCard] Erro ao criar hábito padrão:', error.message);
+          loadHabitos();
+          return;
         }
-      })();
-      return () => { cancelled = true; };
-    }
-  }, [loading, habitos.length, user]);
+        if (data) setHabitos([data as Habito]);
+      } catch (e) {
+        if (cancelled) return;
+        console.error('[HabitosCard] Erro inesperado ao criar hábito padrão:', e);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [loading, habitos.length, user, loadHabitos]);
+
+  // Reconcilia lembretes salvos com o que o SO tem agendado (recupera
+  // agendamentos perdidos). Roda quando a lista de hábitos carrega.
+  useEffect(() => {
+    if (habitos.length > 0) reconcileHabitNotifications(habitos);
+  }, [habitos]);
 
   const handleToggle = async (habitoId: string) => {
     if (!user) return;
@@ -102,6 +119,14 @@ export default function HabitosCard({ selectedDate }: HabitosCardProps) {
         .eq('data', selectedDate);
       if (error) { console.warn('Erro ao desmarcar hábito:', error.message); toast.error('Erro ao desmarcar hábito'); return; }
       setConcluidos(prev => { const s = new Set(prev); s.delete(habitoId); return s; });
+
+      // Voltou a ficar pendente → se tem lembrete ativo, reagenda (o completar
+      // havia cancelado a de hoje e jogado pra amanhã). Sem isto, marcar+desmarcar
+      // deixava o dia sem lembrete.
+      if (habito) {
+        const reminder = getReminder(habitoId);
+        if (reminder.ativo) scheduleHabitNotification(habitoId, habito.nome, reminder.hora, reminder.minuto);
+      }
     } else {
       const { error } = await supabase.from('habitos_registro')
         .insert({ user_id: user.id, habito_id: habitoId, data: selectedDate });
@@ -115,17 +140,35 @@ export default function HabitosCard({ selectedDate }: HabitosCardProps) {
     }
   };
 
+  // Trava reentrância: o add é disparado por Enter e pelo botão; sem esta trava
+  // dois gatilhos rápidos inseriam o mesmo nome duas vezes.
+  const addingRef = useRef(false);
   const handleAddHabito = async () => {
-    if (!novoNome.trim() || !user) return;
-    const maxOrdem = habitos.length > 0 ? Math.max(...habitos.map(h => h.ordem)) + 1 : 0;
-    const { data, error } = await supabase.from('habitos')
-      .insert({ user_id: user.id, nome: novoNome.trim(), ordem: maxOrdem, ativo: true })
-      .select('id, nome, ordem').single();
-    if (error) { console.warn('Erro ao adicionar hábito:', error.message); toast.error('Erro ao adicionar hábito'); return; }
-    if (data) {
-      setHabitos(prev => [...prev, data as Habito]);
-      setNovoNome('');
-      toast.success(`"${(data as Habito).nome}" adicionado!`);
+    const nome = novoNome.trim();
+    if (!nome || !user || addingRef.current) return;
+    addingRef.current = true;
+    try {
+      const maxOrdem = habitos.length > 0 ? Math.max(...habitos.map(h => h.ordem)) + 1 : 0;
+      const { data, error } = await supabase.from('habitos')
+        .insert({ user_id: user.id, nome, ordem: maxOrdem, ativo: true })
+        .select('id, nome, ordem').single();
+      if (error) {
+        if (error.code === '23505') {
+          toast.error('Você já tem um hábito com esse nome');
+          loadHabitos();
+        } else {
+          console.warn('Erro ao adicionar hábito:', error.message);
+          toast.error('Erro ao adicionar hábito');
+        }
+        return;
+      }
+      if (data) {
+        setHabitos(prev => prev.some(h => h.id === (data as Habito).id) ? prev : [...prev, data as Habito]);
+        setNovoNome('');
+        toast.success(`"${(data as Habito).nome}" adicionado!`);
+      }
+    } finally {
+      addingRef.current = false;
     }
   };
 
@@ -167,8 +210,15 @@ export default function HabitosCard({ selectedDate }: HabitosCardProps) {
     const habito = habitos.find(hab => hab.id === habitoId);
     if (!habito) return;
 
+    const scheduled = await scheduleHabitNotification(habitoId, habito.nome, h, m);
+    // Em app nativo, só marca o lembrete como ativo se a notificação realmente
+    // foi agendada. Sem isso, o sino ficava aceso mas nada tocava (permissão
+    // negada). Na web (sem suporte a notificação) mantém como preferência.
+    if (Capacitor.isNativePlatform() && !scheduled) {
+      toast.error('Permita as notificações do app para receber lembretes');
+      return;
+    }
     setReminder(habitoId, h, m, true);
-    await scheduleHabitNotification(habitoId, habito.nome, h, m);
     setConfigurandoLembreteId(null);
     toast.success(`Lembrete de "${habito.nome}" configurado para ${lembreteHora}`);
   };

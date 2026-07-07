@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useRef, ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Session, User } from '@supabase/supabase-js';
 
@@ -73,8 +73,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await supabase.auth.signOut();
   };
 
+  // Mantém a MESMA referência de `user` enquanto o id não muda. Sem isso, cada
+  // evento de auth (cache → getSession → onAuthStateChange, refresh de token)
+  // gera um novo objeto `session.user`, re-disparando effects que dependem de
+  // `user` (ex.: auto-criação de hábitos → duplicação).
+  const userRef = useRef<User | null>(null);
+  const user = useMemo(() => {
+    const next = session?.user ?? null;
+    if (next?.id !== userRef.current?.id) userRef.current = next;
+    return userRef.current;
+  }, [session]);
+
   return (
-    <AuthContext.Provider value={{ session, user: session?.user ?? null, loading, signOut }}>
+    <AuthContext.Provider value={{ session, user, loading, signOut }}>
       {children}
     </AuthContext.Provider>
   );
