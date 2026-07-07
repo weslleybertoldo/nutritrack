@@ -71,6 +71,19 @@ async function requestPermission(): Promise<boolean> {
   }
 }
 
+// Checa se a permissão já está concedida SEM disparar prompt. Usado pela
+// reconciliação para abortar cedo quando não há permissão (evita repetir
+// requestPermissions e spam de warnings, 1 por hábito).
+async function hasPermission(): Promise<boolean> {
+  if (!Capacitor.isNativePlatform()) return false;
+  try {
+    const perm = await LocalNotifications.checkPermissions();
+    return perm.display === 'granted';
+  } catch {
+    return false;
+  }
+}
+
 // Gera um ID numérico estável a partir do habitoId.
 // Usa FNV-1a sobre TODOS os 32 hex do UUID (não só os 8 primeiros) para
 // minimizar colisão entre hábitos — colisão fazia um lembrete sobrescrever/
@@ -167,6 +180,9 @@ export async function reconcileHabitNotifications(
   habitos: { id: string; nome: string }[],
 ) {
   if (!Capacitor.isNativePlatform()) return;
+  // Sem permissão concedida não adianta reagendar — aborta cedo (sem prompt)
+  // para não repetir requestPermissions por hábito.
+  if (!(await hasPermission())) return;
   const pending = await getPendingNotificationIds();
   for (const h of habitos) {
     const r = getReminder(h.id);
