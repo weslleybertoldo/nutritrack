@@ -71,10 +71,18 @@ async function requestPermission(): Promise<boolean> {
   }
 }
 
-// Gera um ID numérico estável a partir do habitoId (primeiros 8 chars hex → int)
-function notificationId(habitoId: string): number {
-  const hex = habitoId.replace(/-/g, '').slice(0, 8);
-  return (parseInt(hex, 16) % 2000000000) + 1; // positivo, < 2^31
+// Gera um ID numérico estável a partir do habitoId.
+// Usa FNV-1a sobre TODOS os 32 hex do UUID (não só os 8 primeiros) para
+// minimizar colisão entre hábitos — colisão fazia um lembrete sobrescrever/
+// cancelar o de outro hábito, e um deles nunca tocava.
+export function notificationId(habitoId: string): number {
+  const hex = habitoId.replace(/-/g, '');
+  let h = 0x811c9dc5; // FNV offset basis
+  for (let i = 0; i < hex.length; i++) {
+    h ^= hex.charCodeAt(i);
+    h = Math.imul(h, 0x01000193); // FNV prime
+  }
+  return ((h >>> 0) % 2000000000) + 1; // positivo, < 2^31
 }
 
 /**
@@ -87,13 +95,13 @@ export async function scheduleHabitNotification(
   habitoNome: string,
   hora: number,
   minuto: number,
-) {
-  if (!Capacitor.isNativePlatform()) return;
+): Promise<boolean> {
+  if (!Capacitor.isNativePlatform()) return false;
 
   const granted = await requestPermission();
   if (!granted) {
     console.warn('[HabitReminders] Permission not granted');
-    return;
+    return false;
   }
 
   const id = notificationId(habitoId);
@@ -130,8 +138,41 @@ export async function scheduleHabitNotification(
       }],
     });
     console.log(`[HabitReminders] Scheduled "${habitoNome}" at ${hora}:${String(minuto).padStart(2, '0')} (id: ${id})`);
+    return true;
   } catch (e) {
     console.error('[HabitReminders] Schedule error:', e);
+    return false;
+  }
+}
+
+/**
+ * Retorna os IDs de notificação atualmente agendados no SO.
+ */
+export async function getPendingNotificationIds(): Promise<Set<number>> {
+  if (!Capacitor.isNativePlatform()) return new Set();
+  try {
+    const { notifications } = await LocalNotifications.getPending();
+    return new Set(notifications.map(n => n.id));
+  } catch {
+    return new Set();
+  }
+}
+
+/**
+ * Reconcilia os lembretes salvos (localStorage) com o que o SO tem agendado.
+ * Reagenda os que sumiram (ex.: dados limpos, agendamento perdido pós-reboot).
+ * `habitos` é a lista atual [id, nome] para saber o texto da notificação.
+ */
+export async function reconcileHabitNotifications(
+  habitos: { id: string; nome: string }[],
+) {
+  if (!Capacitor.isNativePlatform()) return;
+  const pending = await getPendingNotificationIds();
+  for (const h of habitos) {
+    const r = getReminder(h.id);
+    if (r.ativo && !pending.has(notificationId(h.id))) {
+      await scheduleHabitNotification(h.id, h.nome, r.hora, r.minuto);
+    }
   }
 }
 
