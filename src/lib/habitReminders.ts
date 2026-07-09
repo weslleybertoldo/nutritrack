@@ -172,8 +172,29 @@ export async function getPendingNotificationIds(): Promise<Set<number>> {
 }
 
 /**
+ * Dado os IDs pendentes no SO e os habitoIds com lembrete ativo, retorna os IDs
+ * ÓRFÃOS: pendentes que não correspondem a nenhum lembrete ativo atual.
+ *
+ * Órfãos surgem quando o algoritmo de `notificationId` muda entre versões
+ * (ex.: v1.37 usava os 8 primeiros hex; v1.38+ usa FNV-1a dos 32). A notificação
+ * agendada com `every: 'day'` sob o ID antigo sobrevive ao update do app e nunca
+ * é cancelada (o app só cancela sob o ID novo) → dispara em DUPLICIDADE com a nova.
+ * Também cobre notificações de hábitos removidos/desativados.
+ *
+ * Seguro porque o app usa LocalNotifications APENAS para lembretes de hábito.
+ */
+export function findOrphanNotificationIds(
+  pendingIds: number[],
+  activeHabitoIds: string[],
+): number[] {
+  const expected = new Set(activeHabitoIds.map(notificationId));
+  return pendingIds.filter(id => !expected.has(id));
+}
+
+/**
  * Reconcilia os lembretes salvos (localStorage) com o que o SO tem agendado.
- * Reagenda os que sumiram (ex.: dados limpos, agendamento perdido pós-reboot).
+ * Cancela órfãos (esquema de ID antigo, hábitos removidos) e reagenda os que
+ * sumiram (ex.: dados limpos, agendamento perdido pós-reboot).
  * `habitos` é a lista atual [id, nome] para saber o texto da notificação.
  */
 export async function reconcileHabitNotifications(
@@ -184,6 +205,19 @@ export async function reconcileHabitNotifications(
   // para não repetir requestPermissions por hábito.
   if (!(await hasPermission())) return;
   const pending = await getPendingNotificationIds();
+
+  // Cancela notificações órfãs (evita duplicidade após mudança do esquema de ID).
+  const activeIds = habitos.filter(h => getReminder(h.id).ativo).map(h => h.id);
+  const orphans = findOrphanNotificationIds([...pending], activeIds);
+  if (orphans.length) {
+    try {
+      await LocalNotifications.cancel({ notifications: orphans.map(id => ({ id })) });
+      console.log(`[HabitReminders] Canceladas ${orphans.length} notificação(ões) órfã(s):`, orphans);
+    } catch (e) {
+      console.warn('[HabitReminders] Falha ao cancelar órfãs:', e);
+    }
+  }
+
   for (const h of habitos) {
     const r = getReminder(h.id);
     if (r.ativo && !pending.has(notificationId(h.id))) {

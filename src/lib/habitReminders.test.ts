@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { notificationId } from './habitReminders';
+import { notificationId, findOrphanNotificationIds } from './habitReminders';
+
+// Reproduz a impl antiga (v1.37): só os 8 primeiros hex do UUID.
+const oldNotificationId = (habitoId: string) =>
+  (parseInt(habitoId.replace(/-/g, '').slice(0, 8), 16) % 2000000000) + 1;
 
 describe('notificationId', () => {
   it('gera id positivo dentro do range de 32 bits', () => {
@@ -28,5 +32,26 @@ describe('notificationId', () => {
       ids.add(notificationId(`00000000-0000-0000-0000-${h}`));
     }
     expect(ids.size).toBe(500);
+  });
+});
+
+describe('findOrphanNotificationIds', () => {
+  it('detecta notificação órfã do esquema de ID antigo (regressão: 2 lembretes do mesmo hábito pós-update)', () => {
+    const uuid = '1ee91617-d5e0-4f3e-9e42-cd3998294925';
+    const oldId = oldNotificationId(uuid); // ainda pendente no SO desde a v1.37
+    const newId = notificationId(uuid);    // agendado pela v1.38+
+    expect(oldId).not.toBe(newId);
+    // O SO tem os DOIS pendentes → ambos disparam. Só o antigo é órfão.
+    expect(findOrphanNotificationIds([oldId, newId], [uuid])).toEqual([oldId]);
+  });
+
+  it('não marca como órfão um lembrete ativo atual', () => {
+    const uuid = 'a3f1c2d4-1111-2222-3333-444455556666';
+    expect(findOrphanNotificationIds([notificationId(uuid)], [uuid])).toEqual([]);
+  });
+
+  it('marca como órfão notificação de hábito removido/desativado', () => {
+    const removed = notificationId('dead0000-0000-0000-0000-000000000000');
+    expect(findOrphanNotificationIds([removed], [])).toEqual([removed]);
   });
 });
