@@ -1,117 +1,74 @@
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&family=Montserrat:wght@500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@700&family=Inter:wght@400;500;600&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/* Identidade visual: layout do PhysiqCalc (fundo preto, cantos retos, Roboto Condensed + Inter) com o VERDE da logo NutriTrack (#20c860) como cor de destaque. App só escuro. */
 @layer base {
   :root {
-    --font-heading: 'Montserrat', sans-serif;
-    --font-body: 'IBM Plex Sans', sans-serif;
+    --background: 0 0% 5.1%;
+    --foreground: 0 0% 91.8%;
 
-    /* Branco Gesso #F7F7F2 */
-    --background: 60 18% 96%;
-    --foreground: 0 0% 20%;
+    --card: 0 0% 5.1%;
+    --card-foreground: 0 0% 91.8%;
 
-    --card: 60 18% 96%;
-    --card-foreground: 0 0% 20%;
+    --popover: 0 0% 5.1%;
+    --popover-foreground: 0 0% 91.8%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 20%;
+    --primary: 143 72% 45%;
+    --primary-foreground: 0 0% 5.1%;
 
-    /* Açaí #5A1846 -> hsl(318, 57%, 22%) */
-    --primary: 318 57% 22%;
-    --primary-foreground: 60 18% 96%;
+    --secondary: 0 0% 12%;
+    --secondary-foreground: 0 0% 91.8%;
 
-    --secondary: 60 10% 91%;
-    --secondary-foreground: 0 0% 20%;
+    --muted: 0 0% 15%;
+    /* WCAG AA: 65% sobre bg 5% = ~7:1 */
+    --muted-foreground: 0 0% 65%;
 
-    --muted: 60 10% 91%;
-    --muted-foreground: 0 0% 45%;
+    --accent: 143 72% 45%;
+    --accent-foreground: 0 0% 5.1%;
 
-    --accent: 318 57% 22%;
-    --accent-foreground: 60 18% 96%;
+    --destructive: 0 72% 39.2%;
+    --destructive-foreground: 0 0% 91.8%;
 
-    /* Urucum #C84C0D -> hsl(20, 88%, 42%) */
-    --destructive: 20 88% 42%;
-    --destructive-foreground: 60 18% 96%;
+    /* Semânticos do NutriTrack (mantidos, recoloridos pro fundo preto) */
+    --success: 122 47% 45%;
+    --success-foreground: 0 0% 5.1%;
 
-    /* Folha #2E7D32 -> hsl(122, 46%, 33%) */
-    --success: 122 46% 33%;
-    --success-foreground: 60 18% 96%;
+    --warning: 143 72% 45%;
+    --warning-foreground: 0 0% 5.1%;
 
-    /* Mostarda #D4A017 -> hsl(44, 80% 46%) */
-    --warning: 44 80% 46%;
-    --warning-foreground: 0 0% 15%;
+    --caution: 20 90% 55%;
+    --caution-foreground: 0 0% 5.1%;
 
-    /* Urucum for caution */
-    --caution: 20 88% 42%;
-    --caution-foreground: 60 18% 96%;
+    --border: 0 0% 40%;
+    --input: 0 0% 40%;
+    --ring: 143 72% 45%;
 
-    --border: 60 5% 85%;
-    --input: 60 5% 85%;
-    --ring: 318 57% 22%;
+    --radius: 0px;
 
-    --radius: 0.75rem;
+    /* Verde da logo NutriTrack (#20c860) — destaque de ações */
+    --brand: 143 72% 45%;
+    --brand-foreground: 0 0% 5.1%;
 
-    --sidebar-background: 60 10% 95%;
-    --sidebar-foreground: 0 0% 25%;
-    --sidebar-primary: 318 57% 22%;
-    --sidebar-primary-foreground: 60 18% 96%;
-    --sidebar-accent: 60 10% 91%;
-    --sidebar-accent-foreground: 0 0% 20%;
-    --sidebar-border: 60 5% 85%;
-    --sidebar-ring: 318 57% 22%;
-  }
+    /* Classification colors (PhysiqCalc) */
+    --gold: 43 72% 52%;
+    --green: 122 47% 33%;
+    --blue: 211 80% 37%;
+    --yellow: 45 97% 58%;
+    --red: 0 67% 47%;
 
-  .dark {
-    /* Concreto Queimado #242426 */
-    --background: 240 4% 14%;
-    --foreground: 60 18% 96%;
+    --sidebar-background: 0 0% 5.1%;
+    --sidebar-foreground: 0 0% 91.8%;
+    --sidebar-primary: 143 72% 45%;
+    --sidebar-primary-foreground: 0 0% 5.1%;
+    --sidebar-accent: 0 0% 12%;
+    --sidebar-accent-foreground: 0 0% 91.8%;
+    --sidebar-border: 0 0% 40%;
+    --sidebar-ring: 143 72% 45%;
 
-    --card: 240 4% 17%;
-    --card-foreground: 60 18% 96%;
-
-    --popover: 240 4% 17%;
-    --popover-foreground: 60 18% 96%;
-
-    /* Açaí lighter for dark mode */
-    --primary: 318 50% 40%;
-    --primary-foreground: 60 18% 96%;
-
-    --secondary: 240 4% 22%;
-    --secondary-foreground: 60 18% 96%;
-
-    --muted: 240 4% 22%;
-    --muted-foreground: 60 5% 60%;
-
-    --accent: 318 50% 40%;
-    --accent-foreground: 60 18% 96%;
-
-    --destructive: 20 80% 50%;
-    --destructive-foreground: 60 18% 96%;
-
-    --success: 122 46% 40%;
-    --success-foreground: 60 18% 96%;
-
-    --warning: 44 80% 50%;
-    --warning-foreground: 0 0% 10%;
-
-    --caution: 20 80% 50%;
-    --caution-foreground: 60 18% 96%;
-
-    --border: 240 4% 25%;
-    --input: 240 4% 25%;
-    --ring: 318 50% 40%;
-
-    --sidebar-background: 240 4% 12%;
-    --sidebar-foreground: 60 18% 96%;
-    --sidebar-primary: 318 50% 40%;
-    --sidebar-primary-foreground: 60 18% 96%;
-    --sidebar-accent: 240 4% 20%;
-    --sidebar-accent-foreground: 60 18% 96%;
-    --sidebar-border: 240 4% 25%;
-    --sidebar-ring: 318 50% 40%;
+    color-scheme: dark;
   }
 }
 
@@ -125,16 +82,52 @@
   }
 
   h1, h2, h3, h4, h5, h6 {
-    font-family: var(--font-heading);
+    @apply font-heading font-bold uppercase tracking-tight;
+  }
+}
+
+@layer components {
+  .input-underline {
+    @apply w-full bg-transparent border-0 border-b border-muted-foreground px-0 py-3 text-foreground font-body text-lg outline-none transition-colors duration-200 placeholder:text-muted-foreground focus-visible:border-b-2 focus-visible:border-primary;
+  }
+  .input-underline:focus {
+    @apply border-b-2 border-primary;
+  }
+  /* variante compacta pra formulários densos */
+  .input-underline-sm {
+    @apply w-full bg-transparent border-0 border-b border-muted-foreground px-0 py-2 text-foreground font-body text-base outline-none transition-colors duration-200 placeholder:text-muted-foreground;
+  }
+  .input-underline-sm:focus {
+    @apply border-b-2 border-primary;
+  }
+
+  .section-divider {
+    @apply border-t border-muted-foreground/30;
+  }
+
+  .result-card {
+    @apply border border-muted-foreground/30 p-6;
+  }
+
+  .toggle-active {
+    @apply bg-primary text-primary-foreground;
+  }
+
+  .toggle-inactive {
+    @apply bg-secondary text-muted-foreground;
+  }
+
+  .label-caps {
+    @apply text-xs uppercase tracking-wider text-muted-foreground font-body;
   }
 }
 
 @layer utilities {
   .font-heading {
-    font-family: var(--font-heading);
+    font-family: 'Roboto Condensed', sans-serif;
   }
   .font-body {
-    font-family: var(--font-body);
+    font-family: 'Inter', sans-serif;
   }
 }
 
@@ -163,4 +156,9 @@
 
 .modal-footer-safe {
   padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+}
+
+/* Inputs nativos (date/number) no tema escuro */
+input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.8);
 }

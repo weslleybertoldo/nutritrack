@@ -42,26 +42,40 @@ interface UserDetail {
   weekMeals: any[];
 }
 
+// Cabeçalhos de autenticação do painel: a sessão do próprio app (login
+// Google/e-mail) vai no Authorization — a edge admin-api confere o papel admin
+// em user_roles. O x-admin-token (usuário/senha antigo) segue aceito se existir.
+async function adminHeaders(): Promise<Record<string, string> | null> {
+  const adminToken = sessionStorage.getItem('admin_token');
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!adminToken && !session?.access_token) return null;
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${session?.access_token || SUPABASE_ANON_KEY}`,
+    'x-schema': DB_SCHEMA,
+  };
+  if (adminToken) headers['x-admin-token'] = adminToken;
+  return headers;
+}
+
 async function adminFetch(action: string, params?: Record<string, string>) {
-  const token = sessionStorage.getItem('admin_token');
-  if (!token) throw new Error('Não autenticado');
+  const headers = await adminHeaders();
+  if (!headers) throw new Error('Não autenticado');
   const url = new URL(`${SUPABASE_URL}/functions/v1/admin-api`);
   url.searchParams.set('action', action);
   if (params) Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
-  const res = await fetch(url.toString(), {
-    headers: { 'Content-Type': 'application/json', 'x-admin-token': token, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}`, 'x-schema': DB_SCHEMA },
-  });
+  const res = await fetch(url.toString(), { headers });
   const data = await res.json();
   if (data.error) throw new Error(data.error);
   return data;
 }
 
 async function adminPost(action: string, body: Record<string, any>) {
-  const token = sessionStorage.getItem('admin_token');
-  if (!token) throw new Error('Não autenticado');
+  const headers = await adminHeaders();
+  if (!headers) throw new Error('Não autenticado');
   const res = await fetch(`${SUPABASE_URL}/functions/v1/admin-api`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-admin-token': token, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}`, 'x-schema': DB_SCHEMA },
+    headers,
     body: JSON.stringify({ action, ...body }),
   });
   const data = await res.json();
@@ -134,26 +148,25 @@ export default function AdminPage() {
 
   useEffect(() => {
     const verifyAdmin = async () => {
-      const token = sessionStorage.getItem('admin_token');
-      if (!token) { setIsAdmin(false); navigate('/login'); return; }
+      const headers = await adminHeaders();
+      if (!headers) { setIsAdmin(false); navigate('/login'); return; }
       try {
         const res = await fetch(`${SUPABASE_URL}/functions/v1/admin-api`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`, 'x-schema': DB_SCHEMA,
-            'x-admin-token': token,
-          },
+          headers,
           body: JSON.stringify({ action: 'verify' }),
         });
         const data = await res.json();
         if (!res.ok || !data?.valid) {
           sessionStorage.removeItem('admin_token');
-          setIsAdmin(false); navigate('/login'); return;
+          setIsAdmin(false);
+          toast.error('Acesso restrito ao administrador');
+          navigate('/');
+          return;
         }
         setIsAdmin(true);
       } catch {
-        setIsAdmin(false); navigate('/login');
+        setIsAdmin(false); navigate('/');
       }
     };
     verifyAdmin();
@@ -592,7 +605,7 @@ export default function AdminPage() {
               <Ban className={`h-4 w-4 ${p.blocked ? 'text-destructive' : ''}`} />
             </Button>
             <Button variant="ghost" size="icon" onClick={() => toggleLock(p.user_id)} title={p.admin_locked ? 'Liberar edição' : 'Bloquear edição'}>
-              {p.admin_locked ? <Lock className="h-4 w-4 text-warning-foreground" /> : <Unlock className="h-4 w-4 text-success" />}
+              {p.admin_locked ? <Lock className="h-4 w-4 text-warning" /> : <Unlock className="h-4 w-4 text-success" />}
             </Button>
           </div>
         </div>
@@ -697,7 +710,7 @@ export default function AdminPage() {
                 <span className={`px-2 py-1 rounded text-xs ${p.blocked ? 'bg-destructive/10 text-destructive' : 'bg-success/10 text-success'}`}>
                   {p.blocked ? '🔴 Bloqueado' : '🟢 Ativo'}
                 </span>
-                <span className={`px-2 py-1 rounded text-xs ${p.admin_locked ? 'bg-warning/10 text-warning-foreground' : 'bg-success/10 text-success'}`}>
+                <span className={`px-2 py-1 rounded text-xs ${p.admin_locked ? 'bg-warning/10 text-warning' : 'bg-success/10 text-success'}`}>
                   {p.admin_locked ? '🔒 Edição bloqueada' : '🔓 Edição livre'}
                 </span>
               </div>
@@ -926,7 +939,7 @@ export default function AdminPage() {
                   <p className="font-medium text-sm truncate">{u.nome || 'Sem nome'}</p>
                   {getPlanBadge(u, plans)}
                   {u.blocked && <span className="text-[10px] px-1.5 py-0.5 rounded bg-destructive/10 text-destructive">Bloqueado</span>}
-                  {u.admin_locked && <Lock className="h-3 w-3 text-warning-foreground" />}
+                  {u.admin_locked && <Lock className="h-3 w-3 text-warning" />}
                 </div>
                 <p className="text-xs text-muted-foreground truncate">{u.email}</p>
                 <p className="text-[10px] text-muted-foreground">

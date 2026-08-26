@@ -1,22 +1,16 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { supabase, SUPABASE_URL, SUPABASE_ANON_KEY, DB_SCHEMA } from '@/integrations/supabase/client';
+import { supabase } from '@/integrations/supabase/client';
 import { signInWithGoogle } from '@/lib/capacitorAuth';
-import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
-import { Settings, RefreshCw } from 'lucide-react';
+import { RefreshCw, Eye, EyeOff } from 'lucide-react';
 import { CURRENT_VERSION } from '@/components/UpdateChecker';
 
 export default function LoginPage() {
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [showAdminModal, setShowAdminModal] = useState(false);
-  const [adminUsername, setAdminUsername] = useState('');
-  const [adminPassword, setAdminPassword] = useState('');
-  const [adminLoading, setAdminLoading] = useState(false);
-  const navigate = useNavigate();
 
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -69,165 +63,104 @@ export default function LoginPage() {
     window.location.reload();
   };
 
-  const handleAdminLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setAdminLoading(true);
-    try {
-      const _res = await fetch(`${SUPABASE_URL}/functions/v1/admin-api`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`, 'x-schema': DB_SCHEMA
-        },
-        body: JSON.stringify({ action: 'login', username: adminUsername, password: adminPassword }),
-      });
-      const data = await _res.json().catch(() => ({}));
-
-      if (_res.ok && data?.success && typeof data.token === 'string') {
-        // Token JWT HS256 assinado pelo servidor com ADMIN_JWT_SECRET (env Supabase).
-        sessionStorage.setItem('admin_token', data.token);
-        setShowAdminModal(false);
-        navigate('/admin');
-        return;
-      }
-
-      // 4xx: erro de autenticacao/validacao — mostra msg do backend.
-      // 5xx ou network: erro genérico de conexão.
-      if (_res.status >= 400 && _res.status < 500) {
-        toast.error(data?.error || 'Credenciais inválidas');
-      } else {
-        toast.error('Erro ao conectar com o servidor');
-      }
-    } catch (err) {
-      // Network/fetch error — não expõe err.message técnico ("Failed to fetch")
-      console.error('[AdminLogin] erro de rede:', err);
-      toast.error('Erro ao conectar com o servidor');
-    } finally {
-      setAdminLoading(false);
-    }
-  };
-
-  const inputClass = "w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm font-body focus:outline-none focus:ring-2 focus:ring-ring";
-
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background px-4 relative">
-      <div className="w-full max-w-sm space-y-6">
+    <div className="min-h-screen bg-background flex items-center justify-center px-5 relative">
+      <div className="w-full max-w-sm space-y-8">
         <div className="text-center">
-          <h1 className="font-heading text-3xl font-bold text-primary">NutriTrack</h1>
-          <p className="text-sm text-muted-foreground mt-1 font-body">
-            Acompanhamento nutricional inteligente
+          <h1 className="text-3xl sm:text-4xl text-foreground tracking-tight">
+            NUTRI<span className="text-primary">TRACK</span>
+          </h1>
+          <p className="text-sm text-muted-foreground font-body mt-2">
+            {isSignUp ? 'Crie sua conta' : 'Entre na sua conta'}
           </p>
         </div>
 
-        <Button
-          variant="outline"
-          className="w-full gap-2"
+        <button
+          type="button"
           onClick={handleGoogleLogin}
           disabled={loading}
+          className="w-full h-12 border border-muted-foreground/30 text-foreground font-body text-sm flex items-center justify-center gap-3 hover:bg-secondary transition-colors duration-200 disabled:opacity-50"
         >
-          <svg className="h-4 w-4" viewBox="0 0 24 24">
+          <svg className="h-5 w-5" viewBox="0 0 24 24">
             <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
             <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
             <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
             <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
           </svg>
           Entrar com Google
-        </Button>
+        </button>
 
-        <div className="relative">
-          <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-border" /></div>
-          <div className="relative flex justify-center text-xs"><span className="bg-background px-2 text-muted-foreground">ou</span></div>
+        <div className="flex items-center gap-4">
+          <div className="flex-1 border-t border-muted-foreground/30" />
+          <span className="text-xs text-muted-foreground font-body uppercase">ou</span>
+          <div className="flex-1 border-t border-muted-foreground/30" />
         </div>
 
-        <form onSubmit={handleEmailAuth} className="space-y-3">
-          <input
-            type="email"
-            placeholder="Email"
-            value={email}
-            onChange={e => setEmail(e.target.value)}
-            className={inputClass}
-            required
-          />
-          <input
-            type="password"
-            placeholder="Senha"
-            value={password}
-            onChange={e => setPassword(e.target.value)}
-            className={inputClass}
-            required
-            minLength={6}
-          />
-          <Button type="submit" className="w-full" disabled={loading}>
+        <form onSubmit={handleEmailAuth} className="space-y-5">
+          <div>
+            <label className="text-xs uppercase tracking-wider text-muted-foreground font-body mb-2 block">Email</label>
+            <input
+              type="email"
+              placeholder="seu@email.com"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              className="input-underline"
+              autoComplete="email"
+              required
+            />
+          </div>
+          <div>
+            <label className="text-xs uppercase tracking-wider text-muted-foreground font-body mb-2 block">Senha</label>
+            <div className="relative">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                placeholder="••••••••"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                className="input-underline pr-10"
+                autoComplete={isSignUp ? 'new-password' : 'current-password'}
+                required
+                minLength={6}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(v => !v)}
+                className="absolute right-0 top-1/2 -translate-y-1/2 p-2 text-muted-foreground hover:text-foreground transition-colors"
+                aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
+          </div>
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full h-12 bg-primary text-primary-foreground font-heading text-sm uppercase tracking-widest hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
             {loading ? 'Aguarde...' : isSignUp ? 'Criar conta' : 'Entrar'}
-          </Button>
+          </button>
         </form>
 
-        <p className="text-center text-sm text-muted-foreground">
+        <p className="text-center text-sm text-muted-foreground font-body">
           {isSignUp ? 'Já tem conta?' : 'Não tem conta?'}{' '}
-          <button onClick={() => setIsSignUp(!isSignUp)} className="text-primary font-medium hover:underline">
+          <button type="button" onClick={() => setIsSignUp(!isSignUp)} className="text-primary hover:underline">
             {isSignUp ? 'Entrar' : 'Criar conta'}
           </button>
         </p>
-      </div>
 
-      {/* Footer with version and update check */}
-      <div className="absolute bottom-6 left-0 right-0 flex flex-col items-center gap-2">
-        <p className="text-xs text-muted-foreground/50">v{CURRENT_VERSION}</p>
-        <button
-          onClick={handleCheckUpdate}
-          className="flex items-center gap-1 text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors"
-        >
-          <RefreshCw className="h-3 w-3" />
-          Verificar atualizações
-        </button>
-      </div>
-
-      {/* Admin gear icon */}
-      <button
-        onClick={() => setShowAdminModal(true)}
-        className="absolute bottom-6 right-6 p-2 text-muted-foreground/30 hover:text-muted-foreground/60 transition-colors"
-        title="Admin"
-      >
-        <Settings className="h-5 w-5" />
-      </button>
-
-      {/* Admin login modal */}
-      {showAdminModal && (
-        <div className="modal-overlay">
-          <div className="absolute inset-0 bg-foreground/30 backdrop-blur-sm" onClick={() => setShowAdminModal(false)} />
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-sm bg-card rounded-xl border border-border p-6 space-y-4">
-            <div className="text-center">
-              <Settings className="h-8 w-8 text-primary mx-auto mb-2" />
-              <h2 className="font-heading font-bold text-lg">Acesso Administrativo</h2>
-              <p className="text-xs text-muted-foreground">Entre com suas credenciais de admin</p>
-            </div>
-            <form onSubmit={handleAdminLogin} className="space-y-3">
-              <input
-                type="text"
-                placeholder="Usuário"
-                value={adminUsername}
-                onChange={e => setAdminUsername(e.target.value)}
-                className={inputClass}
-                required
-              />
-              <input
-                type="password"
-                placeholder="Senha"
-                value={adminPassword}
-                onChange={e => setAdminPassword(e.target.value)}
-                className={inputClass}
-                required
-              />
-              <Button type="submit" className="w-full" disabled={adminLoading}>
-                {adminLoading ? 'Verificando...' : 'Entrar como Admin'}
-              </Button>
-            </form>
-            <button onClick={() => setShowAdminModal(false)} className="w-full text-center text-sm text-muted-foreground hover:underline">
-              Cancelar
-            </button>
-          </div>
+        <div className="text-center space-y-2">
+          <p className="text-xs text-muted-foreground font-body italic">By Weslley Bertoldo</p>
+          <p className="text-[10px] text-muted-foreground/50 font-body">v{CURRENT_VERSION}</p>
+          <button
+            type="button"
+            onClick={handleCheckUpdate}
+            className="text-[10px] text-muted-foreground/60 hover:text-primary font-body transition-colors flex items-center justify-center gap-1 mx-auto"
+          >
+            <RefreshCw size={10} />
+            Verificar atualizações
+          </button>
         </div>
-      )}
+      </div>
     </div>
   );
 }

@@ -42,9 +42,9 @@ export default function ProfilePage() {
     }
   };
 
-  const inputClass = "w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm font-body focus:outline-none focus:ring-2 focus:ring-ring";
-  const readOnlyClass = "w-full rounded-lg border border-input bg-secondary px-3 py-2.5 text-sm font-body text-muted-foreground";
-  const labelClass = "text-xs text-muted-foreground mb-1 block font-body";
+  const inputClass = "input-underline-sm text-sm";
+  const readOnlyClass = "w-full border-b border-muted-foreground/30 py-2.5 text-sm font-body text-muted-foreground";
+  const labelClass = "label-caps mb-1 block";
 
   const idade = profile.data_nascimento ? calcularIdade(profile.data_nascimento) : null;
 
@@ -103,14 +103,14 @@ export default function ProfilePage() {
     <AppLayout title="Perfil">
       <div className="space-y-6 pb-8">
         {isLocked && (
-          <div className="rounded-lg bg-warning/10 px-3 py-2 text-xs text-warning-foreground font-body">
-            🔒 Edição bloqueada pelo administrador. Entre em contato para alterações.
+          <div className="border-l-2 border-primary bg-primary/10 px-3 py-2.5 text-xs text-primary font-body">
+            Edição bloqueada pelo administrador. Entre em contato para alterações.
           </div>
         )}
 
         {/* Basic info */}
         <section className="space-y-3">
-          <h2 className="font-heading font-semibold text-base">Dados Pessoais</h2>
+          <h2 className="text-base">Dados Pessoais</h2>
           <div>
             <label className={labelClass}>Nome completo</label>
             {renderField('text', profile.nome, e => setProfile({ nome: e.target.value }), { placeholder: 'Seu nome' })}
@@ -130,7 +130,7 @@ export default function ProfilePage() {
             </div>
             <div>
               <label className={labelClass}>Idade</label>
-              <div className="rounded-lg border border-input bg-secondary px-3 py-2.5 text-sm font-body">
+              <div className="w-full border-b border-muted-foreground/30 py-2.5 text-sm font-body text-muted-foreground">
                 {idade !== null ? `${idade} anos` : '—'}
               </div>
             </div>
@@ -140,12 +140,13 @@ export default function ProfilePage() {
             {isLocked ? (
               <div className={readOnlyClass}>{profile.sexo === 'masculino' ? 'Masculino' : profile.sexo === 'feminino' ? 'Feminino' : '—'}</div>
             ) : (
-              <div className="flex gap-2">
+              <div className="flex gap-0">
                 {(['masculino', 'feminino'] as Sexo[]).map(s => (
                   <button
                     key={s}
-                    className={`flex-1 rounded-lg border py-2.5 text-sm font-body transition-colors ${
-                      profile.sexo === s ? 'border-primary bg-primary/10 text-primary font-medium' : 'border-input hover:bg-secondary'
+                    type="button"
+                    className={`flex-1 py-3 px-6 font-heading text-sm uppercase tracking-widest transition-colors duration-200 ${
+                      profile.sexo === s ? 'toggle-active' : 'toggle-inactive'
                     }`}
                     onClick={() => setProfile({ sexo: s })}
                   >
@@ -167,17 +168,17 @@ export default function ProfilePage() {
           </div>
         </section>
 
-        <hr className="border-border" />
+        <hr className="section-divider" />
 
         {/* Dobras cutâneas - 3 dobras */}
         <section className="space-y-3">
-          <h2 className="font-heading font-semibold text-base">Dobras Cutâneas <span className="text-xs text-muted-foreground font-body font-normal">(opcional)</span></h2>
+          <h2 className="text-base">Dobras Cutâneas <span className="text-xs text-muted-foreground font-body font-normal normal-case tracking-normal">(opcional)</span></h2>
           <p className="text-xs text-muted-foreground">
             Protocolo Jackson & Pollock — 3 dobras (mm)
             {profile.sexo === 'feminino' ? ' · Tríceps, Supra-ilíaca, Coxa' : ' · Peitoral, Abdominal, Coxa'}
           </p>
           {!profile.sexo && (
-            <p className="text-xs text-warning-foreground bg-warning/10 rounded-lg px-3 py-2">
+            <p className="text-xs text-primary border-l-2 border-primary bg-primary/10 px-3 py-2 font-body">
               Selecione o sexo acima para ver os campos corretos.
             </p>
           )}
@@ -209,27 +210,27 @@ export default function ProfilePage() {
           )}
           {profile.percentual_gordura != null && (
             <div className="grid grid-cols-3 gap-2 text-center">
-              <div className="rounded-lg border border-border bg-card p-3">
-                <p className="text-xs text-muted-foreground">% Gordura</p>
+              <div className="border border-muted-foreground/30 p-3">
+                <p className="label-caps">% Gordura</p>
                 <p className="font-heading font-bold">{profile.percentual_gordura}%</p>
               </div>
-              <div className="rounded-lg border border-border bg-card p-3">
-                <p className="text-xs text-muted-foreground">Massa Gorda</p>
+              <div className="border border-muted-foreground/30 p-3">
+                <p className="label-caps">Massa Gorda</p>
                 <p className="font-heading font-bold">{profile.massa_gorda} kg</p>
               </div>
-              <div className="rounded-lg border border-border bg-card p-3">
-                <p className="text-xs text-muted-foreground">Massa Magra</p>
+              <div className="border border-muted-foreground/30 p-3">
+                <p className="label-caps">Massa Magra</p>
                 <p className="font-heading font-bold">{profile.massa_magra} kg</p>
               </div>
             </div>
           )}
         </section>
 
-        <hr className="border-border" />
+        <hr className="section-divider" />
 
         {/* Metas de Micronutrientes */}
         <section className="space-y-3">
-          <h2 className="font-heading font-semibold text-base">Metas de Micronutrientes</h2>
+          <h2 className="text-base">Metas de Micronutrientes</h2>
           <p className="text-xs text-muted-foreground">Meta diária para cada micronutriente</p>
           <div className="grid grid-cols-2 gap-3">
             {([
@@ -274,10 +275,10 @@ export default function ProfilePage() {
 
         {/* Modal de configurações */}
         {showSettings && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowSettings(false)}>
-            <div className="bg-card border border-border rounded-xl p-6 mx-4 max-w-sm w-full space-y-4" onClick={e => e.stopPropagation()}>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70" onClick={() => setShowSettings(false)}>
+            <div className="bg-card border border-muted-foreground/30 p-6 mx-4 max-w-sm w-full space-y-4" onClick={e => e.stopPropagation()}>
               <div className="flex items-center justify-between">
-                <h3 className="font-heading text-sm font-semibold uppercase tracking-wider">Configurações</h3>
+                <h3 className="text-sm tracking-wider">Configurações</h3>
                 <button type="button" onClick={() => setShowSettings(false)} className="text-muted-foreground hover:text-foreground transition-colors">
                   <X size={18} />
                 </button>
@@ -301,7 +302,7 @@ export default function ProfilePage() {
                     {updateResult.hasUpdate ? (
                       <UpdateDownloadButton url={updateResult.url!} version={updateResult.version!} size="md" />
                     ) : (
-                      <p className="text-xs text-green-500 flex items-center justify-center gap-1">
+                      <p className="text-xs text-success flex items-center justify-center gap-1">
                         <Check size={12} />
                         Você está usando a versão mais recente
                       </p>

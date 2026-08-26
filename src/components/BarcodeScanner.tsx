@@ -116,7 +116,7 @@ export default function BarcodeScanner({ onScanned, onClose }: BarcodeScannerPro
       className="modal-overlay flex items-center justify-center bg-foreground/60 backdrop-blur-sm"
       onClick={(e) => { if (e.target === e.currentTarget) handleClose(); }}
     >
-      <div className="relative w-[90vw] max-w-sm rounded-2xl bg-card shadow-xl overflow-hidden" onClick={e => e.stopPropagation()}>
+      <div className="relative w-[90vw] max-w-sm rounded-none bg-card shadow-xl overflow-hidden" onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-border">
           <h2 className="font-heading font-semibold text-sm">Escanear Código de Barras</h2>

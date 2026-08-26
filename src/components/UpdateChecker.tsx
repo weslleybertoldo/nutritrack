@@ -60,7 +60,7 @@ const UpdateChecker = () => {
 
   return (
     <div className="fixed bottom-20 left-4 right-4 z-[110] mx-auto max-w-md">
-      <div className="bg-card border border-primary/50 rounded-xl p-4 shadow-lg">
+      <div className="bg-card border border-primary/50 rounded-none p-4 shadow-lg">
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1">
             <p className="font-heading text-sm text-foreground">

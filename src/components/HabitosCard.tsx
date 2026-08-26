@@ -273,7 +273,7 @@ export default function HabitosCard({ selectedDate }: HabitosCardProps) {
               ) : (
                 <button
                   onClick={() => !editando && handleToggle(h.id)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-heading transition-all ${
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-none text-xs font-heading uppercase tracking-wider transition-all ${
                     feito
                       ? 'bg-primary text-primary-foreground'
                       : 'border border-border text-foreground hover:border-primary hover:text-primary'

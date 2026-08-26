@@ -29,7 +29,7 @@ export default function WeekBar({ selectedDate, onSelectDate }: WeekBarProps) {
   }, [selectedDate]);
 
   return (
-    <div className="flex items-center justify-between gap-1 mb-3 overflow-x-auto scrollbar-hide">
+    <div className="flex items-stretch justify-between gap-0 mb-3 border border-muted-foreground/30">
       {weekDays.map(({ dateStr, dayNum, dayLabel }) => {
         const isSelected = dateStr === selectedDate;
         const isToday = dateStr === todayStr;
@@ -37,28 +37,21 @@ export default function WeekBar({ selectedDate, onSelectDate }: WeekBarProps) {
         return (
           <button
             key={dateStr}
+            type="button"
             onClick={() => onSelectDate(dateStr)}
-            className={`flex flex-col items-center gap-0.5 py-1.5 px-2 min-w-[2.75rem] rounded-xl transition-all font-body ${
+            className={`flex flex-1 flex-col items-center gap-0.5 py-2 transition-colors ${
               isSelected
-                ? 'bg-primary text-primary-foreground shadow-sm'
-                : 'hover:bg-secondary text-muted-foreground'
+                ? 'bg-primary text-primary-foreground'
+                : 'text-muted-foreground hover:bg-secondary'
             }`}
           >
-            <span className={`text-[10px] uppercase tracking-wide ${isSelected ? 'font-semibold' : ''}`}>
+            <span className="font-heading text-[10px] uppercase tracking-wider">
               {dayLabel}
             </span>
-            <span className={`text-sm font-heading ${isSelected ? 'font-bold' : 'font-medium'}`}>
+            <span className={`text-base font-heading ${isSelected ? 'text-primary-foreground' : 'text-foreground'}`}>
               {dayNum}
             </span>
-            {isToday && !isSelected && (
-              <span className="w-1 h-1 rounded-full bg-primary" />
-            )}
-            {isToday && isSelected && (
-              <span className="w-1 h-1 rounded-full bg-primary-foreground" />
-            )}
-            {!isToday && (
-              <span className="w-1 h-1" />
-            )}
+            <span className={`w-1 h-1 ${isToday ? (isSelected ? 'bg-primary-foreground' : 'bg-primary') : ''}`} />
           </button>
         );
       })}

@@ -114,17 +114,31 @@ Deno.serve(async (req) => {
       return json({ success: true, token });
     }
 
-    // ── VERIFY: cliente confere validade do token ──────────────────────────
-    if (action === "verify") {
-      const t = (body.token as string | undefined) || req.headers.get("x-admin-token") || "";
-      const payload = await verifyJWT(t, adminJwtSecret);
-      return json({ valid: !!payload });
-    }
+    // ── Autorização (2 caminhos):
+    //   (a) JWT admin emitido pelo action "login" (usuário/senha) — legado;
+    //   (b) sessão do próprio app (login Google/e-mail) cujo usuário tem o papel
+    //       `admin` em user_roles do schema resolvido. É o caminho do botão
+    //       "Acesso admin" na aba Configurações.
+    const isAuthorized = await (async (): Promise<boolean> => {
+      const adminToken = req.headers.get("x-admin-token") || (body.token as string | undefined) || "";
+      if (adminToken && (await verifyJWT(adminToken, adminJwtSecret))) return true;
 
-    // ── Demais actions exigem JWT valido ───────────────────────────────────
-    const adminToken = req.headers.get("x-admin-token") || (body.token as string | undefined) || "";
-    const payload = await verifyJWT(adminToken, adminJwtSecret);
-    if (!payload) return json({ error: "Não autorizado" }, 401);
+      const bearer = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "").trim();
+      const anonKey = Deno.env.get("SUPABASE_ANON_KEY") || "";
+      if (!bearer || bearer === anonKey || bearer === serviceRoleKey) return false;
+      const { data: userData, error: userErr } = await supabase.auth.getUser(bearer);
+      if (userErr || !userData?.user) return false;
+      const { data: roles, error: rolesErr } = await supabase
+        .from("user_roles").select("id").eq("user_id", userData.user.id).eq("role", "admin").limit(1);
+      if (rolesErr) return false;
+      return !!(roles && roles.length > 0);
+    })();
+
+    // ── VERIFY: cliente confere se está autorizado ─────────────────────────
+    if (action === "verify") return json({ valid: isAuthorized });
+
+    // ── Demais actions exigem autorização ──────────────────────────────────
+    if (!isAuthorized) return json({ error: "Não autorizado" }, 401);
 
     if (action === "list_users") {
       const { data, error } = await supabase

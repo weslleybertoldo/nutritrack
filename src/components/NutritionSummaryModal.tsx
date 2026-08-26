@@ -257,7 +257,7 @@ export default function NutritionSummaryModal({
 
   return (
     <div className="modal-overlay">
-      <div className="absolute inset-0 bg-foreground/30 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
       <div className="absolute bottom-0 left-0 right-0 max-h-[90vh] rounded-t-2xl bg-card animate-slide-up flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-border px-4 py-3 shrink-0">

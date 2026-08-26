@@ -36,7 +36,7 @@ export default function InstallBanner() {
 
   return (
     <div className="fixed bottom-20 left-4 right-4 z-50 animate-slide-up">
-      <div className="flex items-center gap-3 rounded-xl bg-card border border-border p-3 shadow-lg">
+      <div className="flex items-center gap-3 rounded-none bg-card border border-border p-3 shadow-lg">
         <Download className="h-5 w-5 text-primary shrink-0" />
         <p className="flex-1 text-sm font-body">
           Instale o NutriTrack na sua tela inicial!
