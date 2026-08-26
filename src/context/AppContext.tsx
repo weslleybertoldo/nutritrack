@@ -1,10 +1,39 @@
-import React, { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef, ReactNode } from 'react';
 import { Profile, Meal, MealItem, Food, Recipe, RecipeItem } from '@/types';
 import { calcularMetaCalorica, calcularMacros, formatDate } from '@/lib/calculations';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/context/AuthContext';
 import { toast } from 'sonner';
 import { setCacheData, getCacheData, addPendingOperation } from '@/lib/offlineSync';
+import { buildProfilePatch, isAuthError } from '@/lib/profilePatch';
+
+// Aviso de falha ao salvar: no máximo 1 toast a cada 10s (digitação gera vários saves).
+let lastProfileSaveToast = 0;
+
+async function persistProfilePatch(userId: string, patch: Record<string, unknown>): Promise<boolean> {
+  const run = () => supabase.from('profiles').update(patch).eq('user_id', userId).select('user_id');
+  try {
+    let { data, error } = await run();
+    if (error && isAuthError(error)) {
+      // Sessão expirada (app voltou do background, token velho): renova e tenta 1x.
+      await supabase.auth.refreshSession();
+      ({ data, error } = await run());
+    }
+    if (error) throw error;
+    // UPDATE sem erro mas 0 linhas = RLS não casou (sessão inválida) — trata como falha.
+    if (!data || data.length === 0) throw new Error('Nenhuma linha atualizada');
+    return true;
+  } catch (err) {
+    console.warn('[Perfil] Falha ao salvar, enfileirando pra sincronizar:', (err as Error)?.message);
+    addPendingOperation('profiles', 'update', patch, undefined, { user_id: userId });
+    const now = Date.now();
+    if (now - lastProfileSaveToast > 10_000) {
+      lastProfileSaveToast = now;
+      toast.error('Não foi possível salvar agora. Vai sincronizar quando reconectar.');
+    }
+    return false;
+  }
+}
 
 const defaultProfile: Profile = {
   nome: '',
@@ -95,13 +124,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(interval);
   }, [state.selectedDate]);
 
+  // Edições locais feitas enquanto o GET do perfil está em voo. Sem isso, uma
+  // resposta atrasada (ex.: 401 transitório + retry logo após o login) chegava
+  // DEPOIS do usuário digitar e devolvia o valor antigo pra tela.
+  const localEditsRef = useRef<Partial<Profile>>({});
+
   // ── LOAD PROFILE ─────────────────────────────────────────────────────────
   useEffect(() => {
     if (!user) return;
     const cacheKey = `nutritrack_profile_${user.id}`;
     const loadProfile = async () => {
+      localEditsRef.current = {};
       try {
-        const { data, error } = await supabase.from('profiles').select('*').eq('user_id', user.id).single();
+        let { data, error } = await supabase.from('profiles').select('*').eq('user_id', user.id).single();
+        if (error && isAuthError(error)) {
+          // "JWT issued at future"/401 no primeiro segundo após o login — espera e repete 1x.
+          await new Promise(r => setTimeout(r, 1200));
+          ({ data, error } = await supabase.from('profiles').select('*').eq('user_id', user.id).single());
+        }
         if (error) throw error;
         if (data) {
           const profileData: Profile = {
@@ -140,8 +180,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
             admin_locked: (data as Record<string, unknown>).admin_locked as boolean | undefined ?? true,
             blocked: (data as Record<string, unknown>).blocked as boolean | undefined ?? false,
           };
-          setCacheData(cacheKey, profileData);
-          setState(s => ({ ...s, profile: profileData, profileLoaded: true }));
+          // O que o usuário editou enquanto o GET voava vence o valor do servidor
+          // (o PATCH desses campos já foi/está sendo enviado).
+          const merged: Profile = { ...profileData, ...localEditsRef.current };
+          setCacheData(cacheKey, merged);
+          setState(s => ({ ...s, profile: merged, profileLoaded: true }));
         }
       } catch (err: any) {
         console.error('Erro ao carregar perfil:', err?.message);
@@ -189,11 +232,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const cacheKey = `nutritrack_meals_${user.id}_${state.selectedDate}`;
     const loadMeals = async () => {
       try {
-        const { data: mealsData, error } = await supabase
+        let { data: mealsData, error } = await supabase
           .from('meals')
           .select('*')
           .eq('user_id', user.id)
           .eq('data', state.selectedDate);
+        if (error && isAuthError(error)) {
+          // 401 transitório logo após o login ("JWT issued at future") — espera e repete 1x.
+          await new Promise(r => setTimeout(r, 1200));
+          ({ data: mealsData, error } = await supabase
+            .from('meals')
+            .select('*')
+            .eq('user_id', user.id)
+            .eq('data', state.selectedDate));
+        }
         if (error) throw error;
         if (mealsData && mealsData.length > 0) {
           const mealIds = mealsData.map(m => m.id);
@@ -289,29 +341,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [user]);
 
   // ── SET PROFILE ───────────────────────────────────────────────────────────
+  // BUG corrigido (26/08): o perfil novo era capturado DENTRO do updater do
+  // setState, e o React 18 não garante que o updater rode na hora — quando ele
+  // era adiado, `newProfile` ficava null e o UPDATE no Supabase era pulado em
+  // silêncio (sem erro, sem toast). Resultado: o ajuste da meta "voltava" ao
+  // recarregar. Agora o merge é feito fora do React (ref) e só o DELTA vai pro
+  // banco, com confirmação de linha afetada e retry após refresh de sessão.
+  const profileRef = useRef<Profile>(state.profile);
+  useEffect(() => { profileRef.current = state.profile; }, [state.profile]);
+
   const setProfile = useCallback((p: Partial<Profile>) => {
-    // Atualização otimista primeiro
-    let newProfile: Profile | null = null;
-    setState(s => {
-      newProfile = { ...s.profile, ...p };
-      return { ...s, profile: newProfile };
-    });
-    // Supabase fora do setState
-    if (user && newProfile) {
-      const { id, user_id, created_at, updated_at, ...profileData } = newProfile as Profile & Record<string, unknown>;
-      void id; void user_id; void created_at; void updated_at;
-      (async () => {
-        try {
-          const { error } = await supabase.from('profiles').update(profileData).eq('user_id', user.id);
-          if (error) {
-            toast.error('Erro ao salvar perfil');
-            addPendingOperation('profiles', 'update', profileData, undefined, { user_id: user.id });
-          }
-        } catch {
-          addPendingOperation('profiles', 'update', profileData, undefined, { user_id: user.id });
-        }
-      })();
-    }
+    const merged: Profile = { ...profileRef.current, ...p };
+    profileRef.current = merged;
+    localEditsRef.current = { ...localEditsRef.current, ...p };
+    setState(s => ({ ...s, profile: { ...s.profile, ...p } }));
+    if (!user) return;
+    setCacheData(`nutritrack_profile_${user.id}`, merged);
+    const patch = buildProfilePatch(p);
+    if (Object.keys(patch).length === 0) return;
+    void persistProfilePatch(user.id, patch);
   }, [user]);
 
   const setSelectedDate = useCallback((d: string) => { setState(s => ({ ...s, selectedDate: d })); }, []);

@@ -108,10 +108,10 @@ export default function HydrationCard({ selectedDate, pesoKg }: HydrationCardPro
 
   const progressColor =
     progress >= 100
-      ? '[&>div]:bg-blue-500'
+      ? '[&>div]:bg-classify-blue'
       : progress >= 60
-      ? '[&>div]:bg-blue-400'
-      : '[&>div]:bg-blue-300';
+      ? '[&>div]:bg-classify-blue/80'
+      : '[&>div]:bg-classify-blue/60';
 
   return (
     <div className="rounded-lg border border-border bg-card overflow-hidden mb-3">
@@ -120,7 +120,7 @@ export default function HydrationCard({ selectedDate, pesoKg }: HydrationCardPro
         onClick={() => setExpanded(e => !e)}
       >
         <div className="flex items-center gap-3 flex-1 text-left">
-          <Droplets className="h-5 w-5 text-blue-400 shrink-0" />
+          <Droplets className="h-5 w-5 text-classify-blue shrink-0" />
           <div className="flex-1">
             <p className="font-heading font-semibold text-sm">Hidratação diária</p>
             <p className="text-xs text-muted-foreground">
@@ -136,7 +136,7 @@ export default function HydrationCard({ selectedDate, pesoKg }: HydrationCardPro
       <div className="px-4 pb-3">
         <Progress value={progress} className={`h-2 ${progressColor}`} />
         {progress >= 100 && (
-          <p className="text-xs text-blue-400 mt-1 font-body">💧 Meta de hidratação atingida!</p>
+          <p className="text-xs text-classify-blue mt-1 font-body">💧 Meta de hidratação atingida!</p>
         )}
       </div>
 
@@ -155,7 +155,7 @@ export default function HydrationCard({ selectedDate, pesoKg }: HydrationCardPro
           size="sm"
           onClick={handleRegistrar}
           disabled={saving || !quantidade}
-          className="bg-blue-500 hover:bg-blue-600 text-white"
+          className="bg-primary hover:bg-primary/90 text-primary-foreground"
         >
           <Plus className="h-4 w-4 mr-1" />
           Registrar
@@ -177,7 +177,7 @@ export default function HydrationCard({ selectedDate, pesoKg }: HydrationCardPro
                   className="flex items-center justify-between py-1.5 border-b border-border last:border-0"
                 >
                   <div className="flex items-center gap-2">
-                    <Droplets className="h-3.5 w-3.5 text-blue-400" />
+                    <Droplets className="h-3.5 w-3.5 text-classify-blue" />
                     <span className="text-sm font-body font-medium">{formatMl(r.quantidade_ml)}</span>
                     <span className="text-xs text-muted-foreground">{formatHora(r.registrado_em)}</span>
                   </div>

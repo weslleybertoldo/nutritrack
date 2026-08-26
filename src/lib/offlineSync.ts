@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 // ── Tipos ────────────────────────────────────────────────────────────────────
 type OperationType = "upsert" | "insert" | "update" | "delete";
 
-interface PendingOperation {
+export interface PendingOperation {
   id: string; // UUID único para evitar duplicatas
   table: string;
   type: OperationType;
@@ -75,7 +75,7 @@ function generateId(): string {
 // ── Compactação de fila ─────────────────────────────────────────────────────
 // Remove operações redundantes (ex: 5 upserts no mesmo registro → mantém só o último)
 
-function compactQueue(ops: PendingOperation[]): PendingOperation[] {
+export function compactQueue(ops: PendingOperation[]): PendingOperation[] {
   const map = new Map<string, PendingOperation>();
 
   for (const op of ops) {
@@ -96,7 +96,13 @@ function compactQueue(ops: PendingOperation[]): PendingOperation[] {
     } else {
       const existing = map.get(key);
       if (!existing || existing.type !== "delete") {
-        map.set(key, op);
+        // Updates parciais no mesmo registro se ACUMULAM (o perfil manda só o
+        // delta de cada campo — descartar o anterior perderia campos alterados).
+        if (existing && existing.type === "update" && op.type === "update") {
+          map.set(key, { ...op, data: { ...(existing.data || {}), ...(op.data || {}) } });
+        } else {
+          map.set(key, op);
+        }
       }
     }
   }

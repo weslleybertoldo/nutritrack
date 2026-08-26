@@ -14,8 +14,8 @@ export default {
     },
     extend: {
       fontFamily: {
-        heading: ['var(--font-heading)', 'sans-serif'],
-        body: ['var(--font-body)', 'sans-serif'],
+        heading: ['"Roboto Condensed"', 'sans-serif'],
+        body: ['Inter', 'sans-serif'],
       },
       colors: {
         border: "hsl(var(--border))",
@@ -62,6 +62,17 @@ export default {
         caution: {
           DEFAULT: "hsl(var(--caution))",
           foreground: "hsl(var(--caution-foreground))",
+        },
+        brand: {
+          DEFAULT: "hsl(var(--brand))",
+          foreground: "hsl(var(--brand-foreground))",
+        },
+        classify: {
+          gold: "hsl(var(--gold))",
+          green: "hsl(var(--green))",
+          blue: "hsl(var(--blue))",
+          yellow: "hsl(var(--yellow))",
+          red: "hsl(var(--red))",
         },
         sidebar: {
           DEFAULT: "hsl(var(--sidebar-background))",

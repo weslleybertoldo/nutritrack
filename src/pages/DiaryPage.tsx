@@ -15,6 +15,7 @@ import HydrationCard from '@/components/HydrationCard';
 import HabitosCard from '@/components/HabitosCard';
 import { supabase } from '@/integrations/supabase/client';
 import UpdateChecker, { CURRENT_VERSION } from '@/components/UpdateChecker';
+import { getCacheData, setCacheData } from '@/lib/offlineSync';
 import UpdateDownloadButton from '@/components/UpdateDownloadButton';
 
 interface MealConfigItem { id: string; tipo: string; nome_personalizado?: string; ordem: number; }
@@ -33,6 +34,9 @@ export default function DiaryPage() {
   const [expandedMeals, setExpandedMeals] = useState<Record<string, boolean>>({});
   const [addingMealType, setAddingMealType] = useState(false);
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  // Dupla confirmação ao excluir refeição: { nome exibido, ação a executar }
+  const [confirmRemove, setConfirmRemove] = useState<{ nome: string; run: () => Promise<void> } | null>(null);
+  const [removing, setRemoving] = useState(false);
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [updateResult, setUpdateResult] = useState<null | { hasUpdate: boolean; url?: string; version?: string }>(null);
 
@@ -64,8 +68,14 @@ export default function DiaryPage() {
   };
 
   // ── Configuração persistente de refeições do usuário ─────────────────────
-  const [mealConfig, setMealConfig] = useState<MealConfigItem[]>([]);
-  const [configLoaded, setConfigLoaded] = useState(false);
+  // Inicia do CACHE: sem isso, a cada volta pro Diário a tela mostrava as
+  // refeições na ordem crua do banco por alguns instantes (bug pré-existente
+  // em prod) até o fetch de user_meal_config responder.
+  const configCacheKey = user ? `nutritrack_meal_config_${user.id}` : null;
+  const [mealConfig, setMealConfig] = useState<MealConfigItem[]>(
+    () => (configCacheKey ? getCacheData<MealConfigItem[]>(configCacheKey) : null) || []
+  );
+  const [configLoaded, setConfigLoaded] = useState<boolean>(() => mealConfig.length > 0);
 
   // Carrega config do banco
   const loadMealConfig = useCallback(async () => {
@@ -79,6 +89,7 @@ export default function DiaryPage() {
     if (error) { console.warn('Erro ao carregar config de refeições:', error.message); setConfigLoaded(true); return; }
     if (data) {
       setMealConfig(data as MealConfigItem[]);
+      if (user) setCacheData(`nutritrack_meal_config_${user.id}`, data);
       if (data.length === 0) await initDefaultMealConfig();
     }
     setConfigLoaded(true);
@@ -171,7 +182,10 @@ export default function DiaryPage() {
 
   // Lista de refeições para exibir — config define quais aparecem sempre
   const displayMeals = useMemo(() => {
-    if (!configLoaded) return todayMeals;
+    if (!configLoaded) {
+      const idx = (t: string) => { const i = REFEICOES_PADRAO.indexOf(t as TipoRefeicao); return i === -1 ? 99 : i; };
+      return [...todayMeals].sort((a, b) => idx(a.tipo) - idx(b.tipo));
+    }
     return mealConfig.map(config => {
       const existing = todayMeals.find(m => m.tipo === config.tipo);
       if (existing) return { ...existing, _configId: config.id };
@@ -200,11 +214,11 @@ export default function DiaryPage() {
       <WeekBar selectedDate={selectedDate} onSelectDate={setSelectedDate} />
 
       {/* Week navigation */}
-      <div className="flex items-center justify-between mb-5">
+      <div className="flex items-center justify-between mb-5 border-b border-muted-foreground/30 pb-2">
         <button onClick={() => navigateWeek(-1)} className="p-2 rounded-lg hover:bg-secondary transition-colors">
           <ChevronLeft className="h-5 w-5" />
         </button>
-        <span className="font-heading font-semibold text-base">{displayDate(selectedDate)}</span>
+        <span className="font-heading text-base uppercase tracking-wider">{displayDate(selectedDate)}</span>
         <button onClick={() => navigateWeek(1)} className="p-2 rounded-lg hover:bg-secondary transition-colors">
           <ChevronRight className="h-5 w-5" />
         </button>
@@ -217,20 +231,20 @@ export default function DiaryPage() {
           onClick={() => setShowNutritionSummary(true)}
         >
           <div className="text-left">
-            <p className="text-sm text-muted-foreground font-body">Calorias</p>
-            <p className="font-heading text-2xl font-bold">
+            <p className="label-caps">Calorias</p>
+            <p className="font-heading text-3xl">
               {Math.round(summary.calorias)} <span className="text-base font-normal text-muted-foreground">/ {metaFinal} kcal</span>
             </p>
           </div>
           <ChevronRightIcon className="h-4 w-4 text-muted-foreground mb-1.5" />
         </button>
-        <Progress value={calProgress} className="h-2.5" />
+        <Progress value={calProgress} className="h-1.5" />
 
         {warning && (
           <div className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-body ${
             warning.type === 'over' ? 'bg-destructive/10 text-destructive' :
             warning.type === 'done' ? 'bg-success/10 text-success' :
-            'bg-warning/10 text-warning-foreground'
+            'bg-warning/10 text-warning'
           }`}>
             <span>{warning.text}</span>
           </div>
@@ -240,19 +254,23 @@ export default function DiaryPage() {
         <div className="grid grid-cols-3 gap-2">
           {([
             { label: 'Proteína', consumed: summary.proteina, goal: macroMetas.proteina.g, color: 'text-primary' },
-            { label: 'Carbo', consumed: summary.carbo, goal: macroMetas.carbo.g, color: 'text-warning-foreground' },
+            { label: 'Carbo', consumed: summary.carbo, goal: macroMetas.carbo.g, color: 'text-classify-blue' },
             { label: 'Gordura', consumed: summary.gordura, goal: macroMetas.gordura.g, color: 'text-caution' },
-          ] as const).map(m => (
-            <div key={m.label} className="rounded-lg border border-border bg-card p-3 text-center">
-              <p className="text-xs text-muted-foreground mb-1">{m.label}</p>
-              <p className={`font-heading font-bold text-sm ${m.color}`}>{Math.round(m.consumed)}g</p>
-              <p className="text-xs text-muted-foreground">/ {m.goal}g</p>
-            </div>
-          ))}
+          ] as const).map(m => {
+            const atingiu = m.goal > 0 && m.consumed >= m.goal;
+            return (
+              <div key={m.label} className="relative border border-muted-foreground/30 p-3 text-center">
+                {atingiu && <Check className={`absolute top-1.5 right-1.5 h-3 w-3 opacity-70 ${m.color}`} aria-label="Meta atingida" />}
+                <p className="text-xs text-muted-foreground mb-1">{m.label}</p>
+                <p className={`font-heading font-bold text-sm ${atingiu ? m.color : 'text-muted-foreground'}`}>{Math.round(m.consumed)}g</p>
+                <p className={`text-xs font-medium ${m.color}`}>/ {m.goal}g</p>
+              </div>
+            );
+          })}
         </div>
       </div>
 
-      <hr className="border-border mb-4" />
+      <hr className="section-divider mb-4" />
 
       {/* Meals */}
       {displayMeals.map((meal: any) => {
@@ -303,16 +321,16 @@ export default function DiaryPage() {
             >
               <GripVertical className="h-4 w-4 text-muted-foreground/40 mr-1 shrink-0 cursor-grab" />
               <div className="text-left flex-1">
-                <p className="font-heading font-semibold text-sm">
+                <p className="font-heading text-sm uppercase tracking-wide">
                   {meal.nome_personalizado || TIPO_REFEICAO_LABELS[meal.tipo as TipoRefeicao] || meal.tipo}
                 </p>
-                <p className="text-xs text-muted-foreground font-body">
+                <p className={`text-xs font-body ${!isPlaceholder && mealCals > 0 ? 'text-brand font-medium' : 'text-muted-foreground'}`}>
                   {isPlaceholder ? 'Vazio' : `${Math.round(mealCals)} kcal`}
                 </p>
               </div>
-              {!isPlaceholder && (isExpanded
+              {isExpanded
                 ? <ChevronUp className="h-4 w-4 text-muted-foreground" />
-                : <ChevronDown className="h-4 w-4 text-muted-foreground" />)}
+                : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
             </button>
 
             {!isPlaceholder && isExpanded && (
@@ -343,37 +361,20 @@ export default function DiaryPage() {
                   </div>
                 )}
                 <div className="flex items-center gap-2 p-2 border-t border-border">
-                  <Button size="sm" variant="ghost" className="flex-1 text-xs" onClick={() => setAddFoodMealId(meal.id)}>
+                  <Button size="sm" variant="ghost" className="flex-1 text-xs text-brand hover:text-brand hover:bg-brand/10" onClick={() => setAddFoodMealId(meal.id)}>
                     <Plus className="h-3.5 w-3.5 mr-1" /> Adicionar
                   </Button>
-                  <Button size="sm" variant="ghost" className="text-xs text-destructive hover:text-destructive"
-                    onClick={() => handleRemoveMealConfig(meal.id, meal.tipo)}>
+                  <Button size="sm" variant="ghost" className="text-xs text-destructive hover:text-destructive" aria-label="Excluir refeição"
+                    onClick={() => setConfirmRemove({
+                      nome: meal.nome_personalizado || TIPO_REFEICAO_LABELS[meal.tipo as TipoRefeicao] || meal.tipo,
+                      run: () => handleRemoveMealConfig(meal.id, meal.tipo),
+                    })}>
                     <Trash2 className="h-3.5 w-3.5" />
                   </Button>
                 </div>
               </div>
             )}
 
-            {isPlaceholder && (
-              <div className="border-t border-border px-3 py-2 flex gap-2">
-                <Button size="sm" variant="ghost" className="flex-1 text-xs"
-                  onClick={async () => {
-                    const created = await addMeal({ data: selectedDate, tipo: meal.tipo, nome_personalizado: meal.nome_personalizado });
-                    if (created) setAddFoodMealId(created.id);
-                  }}>
-                  <Plus className="h-3.5 w-3.5 mr-1" /> Adicionar alimento
-                </Button>
-                <Button size="sm" variant="ghost" className="text-xs text-destructive hover:text-destructive"
-                  onClick={async () => {
-                    if (user) {
-                      await supabase.from('user_meal_config').update({ ativo: false }).eq('user_id', user.id).eq('tipo', meal.tipo);
-                      setMealConfig(prev => prev.filter(m => m.tipo !== meal.tipo));
-                    }
-                  }}>
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
-              </div>
-            )}
           </div>
         );
       })}
@@ -409,19 +410,19 @@ export default function DiaryPage() {
       {/* Body composition */}
       {bodyComp && (
         <>
-          <hr className="border-border mb-4" />
+          <hr className="section-divider mb-4" />
           <section className="mb-8">
-            <h2 className="text-sm font-heading font-semibold mb-3">Composição Corporal</h2>
+            <h2 className="text-sm mb-3">Composição Corporal</h2>
             <div className="grid grid-cols-3 gap-2">
-              <div className="rounded-lg border border-border bg-card p-3 text-center">
+              <div className="border border-muted-foreground/30 p-3 text-center">
                 <p className="text-lg font-heading font-bold">{bodyComp.pct}%</p>
                 <p className="text-xs text-muted-foreground font-body">Gordura</p>
               </div>
-              <div className="rounded-lg border border-border bg-card p-3 text-center">
+              <div className="border border-muted-foreground/30 p-3 text-center">
                 <p className="text-lg font-heading font-bold">{bodyComp.massaGorda}kg</p>
                 <p className="text-xs text-muted-foreground font-body">M. Gorda</p>
               </div>
-              <div className="rounded-lg border border-border bg-card p-3 text-center">
+              <div className="border border-muted-foreground/30 p-3 text-center">
                 <p className="text-lg font-heading font-bold">{bodyComp.massaMagra}kg</p>
                 <p className="text-xs text-muted-foreground font-body">M. Magra</p>
               </div>
@@ -448,7 +449,7 @@ export default function DiaryPage() {
             {updateResult.hasUpdate ? (
               <UpdateDownloadButton url={updateResult.url!} version={updateResult.version!} size="sm" />
             ) : (
-              <p className="text-[10px] text-green-500 flex items-center justify-center gap-1">
+              <p className="text-[10px] text-success flex items-center justify-center gap-1">
                 <Check size={10} />
                 Versão mais recente
               </p>
@@ -458,6 +459,45 @@ export default function DiaryPage() {
       </footer>
 
       <UpdateChecker />
+
+      {/* Confirmação de exclusão de refeição */}
+      {confirmRemove && (
+        <div className="modal-overlay flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => !removing && setConfirmRemove(null)} />
+          <div className="relative bg-card border border-muted-foreground/30 p-6 mx-4 max-w-sm w-full space-y-5 animate-slide-up" role="dialog" aria-modal="true">
+            <div className="text-center space-y-2">
+              <div className="mx-auto flex h-12 w-12 items-center justify-center bg-destructive/15 text-destructive">
+                <Trash2 className="h-6 w-6" />
+              </div>
+              <h3 className="text-lg">Certeza que deseja excluir?</h3>
+              <p className="text-sm text-muted-foreground font-body">
+                A refeição <span className="text-foreground font-medium">{confirmRemove.nome}</span> será removida do seu diário.
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                disabled={removing}
+                onClick={() => setConfirmRemove(null)}
+                className="flex-1 h-11 border border-muted-foreground/40 font-heading text-sm uppercase tracking-widest text-foreground hover:bg-secondary transition-colors disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={removing}
+                onClick={async () => {
+                  setRemoving(true);
+                  try { await confirmRemove.run(); } finally { setRemoving(false); setConfirmRemove(null); }
+                }}
+                className="flex-1 h-11 bg-destructive text-destructive-foreground font-heading text-sm uppercase tracking-widest hover:bg-destructive/90 transition-colors disabled:opacity-50"
+              >
+                {removing ? 'Excluindo...' : 'Excluir'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modals */}
       {addFoodMealId && (

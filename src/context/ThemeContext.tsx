@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useEffect, ReactNode } from 'react';
 import { Tema } from '@/types';
 
 interface ThemeContextValue {
@@ -6,36 +6,18 @@ interface ThemeContextValue {
   setTema: (t: Tema) => void;
 }
 
-const ThemeContext = createContext<ThemeContextValue>({ tema: 'system', setTema: () => {} });
+// O app é SÓ escuro (identidade visual do PhysiqCalc). O contexto continua
+// existindo pra não quebrar quem consome `useTheme`, mas o tema é fixo.
+const ThemeContext = createContext<ThemeContextValue>({ tema: 'dark', setTema: () => {} });
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [tema, setTema] = useState<Tema>(() => {
-    return (localStorage.getItem('nutritrack-theme') as Tema) || 'system';
-  });
-
   useEffect(() => {
-    localStorage.setItem('nutritrack-theme', tema);
-    const root = document.documentElement;
-
-    if (tema === 'dark') {
-      root.classList.add('dark');
-    } else if (tema === 'light') {
-      root.classList.remove('dark');
-    } else {
-      // system
-      const mq = window.matchMedia('(prefers-color-scheme: dark)');
-      const apply = () => {
-        if (mq.matches) root.classList.add('dark');
-        else root.classList.remove('dark');
-      };
-      apply();
-      mq.addEventListener('change', apply);
-      return () => mq.removeEventListener('change', apply);
-    }
-  }, [tema]);
+    document.documentElement.classList.add('dark');
+    try { localStorage.setItem('nutritrack-theme', 'dark'); } catch { /* sem storage */ }
+  }, []);
 
   return (
-    <ThemeContext.Provider value={{ tema, setTema }}>
+    <ThemeContext.Provider value={{ tema: 'dark', setTema: () => {} }}>
       {children}
     </ThemeContext.Provider>
   );
