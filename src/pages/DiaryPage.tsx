@@ -17,6 +17,7 @@ import { supabase } from '@/integrations/supabase/client';
 import UpdateChecker, { CURRENT_VERSION } from '@/components/UpdateChecker';
 import { getCacheData, setCacheData } from '@/lib/offlineSync';
 import UpdateDownloadButton from '@/components/UpdateDownloadButton';
+import { mergeDuplicateMeals } from '@/lib/mealsMerge';
 
 interface MealConfigItem { id: string; tipo: string; nome_personalizado?: string; ordem: number; }
 
@@ -109,7 +110,13 @@ export default function DiaryPage() {
 
   useEffect(() => { loadMealConfig(); }, [loadMealConfig]);
 
-  const todayMeals = getMealsForDate(selectedDate);
+  // Rede de segurança: refeições do mesmo tipo no dia (duplicatas antigas) são
+  // exibidas como uma só. Antes a tela mostrava só a primeira e o total do dia
+  // somava todas — o café da manhã aparecia "0 kcal" com os alimentos escondidos.
+  const todayMeals = useMemo(
+    () => mergeDuplicateMeals(getMealsForDate(selectedDate)),
+    [getMealsForDate, selectedDate],
+  );
   const summary = getDaySummary(selectedDate);
   const { metaFinal } = getMetaCalorica();
   const macroMetas = getMacroMetas();

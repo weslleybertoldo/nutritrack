@@ -141,6 +141,7 @@ const PERMANENT_ERRORS = [
   "violates foreign key constraint",
   "violates not-null constraint",
   "violates check constraint",
+  "duplicate key value",
   "column",
 ];
 

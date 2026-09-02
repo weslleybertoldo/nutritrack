@@ -6,6 +6,7 @@ import { useAuth } from '@/context/AuthContext';
 import { toast } from 'sonner';
 import { setCacheData, getCacheData, addPendingOperation } from '@/lib/offlineSync';
 import { buildProfilePatch, isAuthError } from '@/lib/profilePatch';
+import { reconcileMeals } from '@/lib/mealsMerge';
 
 // Aviso de falha ao salvar: no máximo 1 toast a cada 10s (digitação gera vários saves).
 let lastProfileSaveToast = 0;
@@ -129,6 +130,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // DEPOIS do usuário digitar e devolvia o valor antigo pra tela.
   const localEditsRef = useRef<Partial<Profile>>({});
 
+  // Refeições/itens criados ou removidos localmente nesta sessão. A busca das
+  // refeições do dia pode responder DEPOIS de o usuário tocar no card; sem isso
+  // a resposta atrasada sobrescrevia o estado, o card voltava a "Vazio" e o
+  // segundo toque criava uma refeição duplicada (causa raiz do "café que sumiu").
+  const locallyCreatedRef = useRef<Set<string>>(new Set());
+  const locallyDeletedRef = useRef<Set<string>>(new Set());
+  // Espelho síncrono de state.meals pra decisões fora do ciclo de render (addMeal).
+  const mealsRef = useRef<Meal[]>([]);
+  useEffect(() => { mealsRef.current = state.meals; }, [state.meals]);
+
   // ── LOAD PROFILE ─────────────────────────────────────────────────────────
   useEffect(() => {
     if (!user) return;
@@ -236,7 +247,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
           .from('meals')
           .select('*')
           .eq('user_id', user.id)
-          .eq('data', state.selectedDate);
+          .eq('data', state.selectedDate)
+          .order('created_at');
         if (error && isAuthError(error)) {
           // 401 transitório logo após o login ("JWT issued at future") — espera e repete 1x.
           await new Promise(r => setTimeout(r, 1200));
@@ -244,9 +256,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
             .from('meals')
             .select('*')
             .eq('user_id', user.id)
-            .eq('data', state.selectedDate));
+            .eq('data', state.selectedDate)
+            .order('created_at'));
         }
         if (error) throw error;
+        // Nunca sobrescreve o estado às cegas: a resposta pode ser mais velha que
+        // uma refeição/item que o usuário acabou de criar (ver reconcileMeals).
+        const apply = (serverMeals: Meal[]) => setState(s => ({
+          ...s,
+          meals: reconcileMeals(serverMeals, s.meals, state.selectedDate, locallyCreatedRef.current, locallyDeletedRef.current),
+        }));
         if (mealsData && mealsData.length > 0) {
           const mealIds = mealsData.map(m => m.id);
           const { data: itemsData, error: itemsErr } = await supabase
@@ -260,19 +279,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
               .map(i => ({ ...i, food: i.food as unknown as Food })) as MealItem[],
           }));
           setCacheData(cacheKey, mealsWithItems);
-          setState(s => ({ ...s, meals: mealsWithItems }));
+          apply(mealsWithItems);
         } else {
           setCacheData(cacheKey, []);
-          setState(s => ({ ...s, meals: [] }));
+          apply([]);
         }
       } catch (err: any) {
         console.error('Erro ao carregar refeições:', err?.message);
         const cached = getCacheData<Meal[]>(cacheKey);
-        if (cached) {
-          setState(s => ({ ...s, meals: cached }));
-        } else {
-          setState(s => ({ ...s, meals: [] }));
-        }
+        setState(s => ({
+          ...s,
+          meals: reconcileMeals(cached || [], s.meals, state.selectedDate, locallyCreatedRef.current, locallyDeletedRef.current),
+        }));
       }
     };
     loadMeals();
@@ -406,19 +424,41 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // ── MEALS ─────────────────────────────────────────────────────────────────
   const addMeal = useCallback(async (m: Omit<Meal, 'id' | 'user_id'>): Promise<Meal> => {
     if (!user) throw new Error('Usuário não autenticado');
+    // Uma refeição por tipo por dia: se já existe (toque duplo, resposta atrasada
+    // da busca), reaproveita em vez de criar outra.
+    const existing = mealsRef.current.find(x => x.data === m.data && x.tipo === m.tipo);
+    if (existing) return existing;
     const tempId = crypto.randomUUID();
+    locallyCreatedRef.current.add(tempId);
     const mealPayload = { ...m, user_id: user.id };
     // Atualização otimista
     const optimisticMeal: Meal = { ...mealPayload, id: tempId, items: [] } as Meal;
     setState(s => ({ ...s, meals: [...s.meals, optimisticMeal] }));
+    const replaceOptimistic = (meal: Meal) => {
+      locallyCreatedRef.current.add(meal.id);
+      setState(s => ({ ...s, meals: s.meals.map(x => x.id === tempId ? meal : x) }));
+    };
     try {
       const { data, error } = await supabase.from('meals').insert(mealPayload).select().single();
       if (error) throw error;
       const meal: Meal = { ...data, tipo: data.tipo as any, items: [] };
       // Substitui o otimista pelo real
-      setState(s => ({ ...s, meals: s.meals.map(existing => existing.id === tempId ? meal : existing) }));
+      replaceOptimistic(meal);
       return meal;
     } catch (err: any) {
+      if (err?.code === '23505') {
+        // Índice único meals(user_id, data, tipo): a refeição já existe no servidor
+        // (outro aparelho ou corrida). Busca a linha real e reaproveita.
+        const { data: row } = await supabase
+          .from('meals').select('*')
+          .eq('user_id', user.id).eq('data', m.data).eq('tipo', m.tipo)
+          .maybeSingle();
+        if (row) {
+          const meal: Meal = { ...row, tipo: row.tipo as Meal['tipo'], items: [] };
+          replaceOptimistic(meal);
+          return meal;
+        }
+      }
       // Enfileira para sync offline
       addPendingOperation('meals', 'upsert', { ...mealPayload, id: tempId }, 'id');
       return optimisticMeal;
@@ -428,6 +468,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const addMealItem = useCallback(async (mealId: string, item: Omit<MealItem, 'id' | 'meal_id'>) => {
     const { food, ...itemData } = item as any;
     const tempId = crypto.randomUUID();
+    locallyCreatedRef.current.add(tempId);
     const insertPayload = { ...itemData, meal_id: mealId };
     // Atualização otimista
     const optimisticItem: MealItem = { ...insertPayload, id: tempId, food } as MealItem;
@@ -440,6 +481,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         .single();
       if (error) throw error;
       const newItem: MealItem = { ...data, food: data.food as unknown as Food } as MealItem;
+      locallyCreatedRef.current.add(newItem.id);
       // Substitui otimista pelo real
       setState(s => ({ ...s, meals: s.meals.map(m => m.id === mealId ? { ...m, items: (m.items || []).map(i => i.id === tempId ? newItem : i) } : m) }));
     } catch (err: any) {
@@ -471,6 +513,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const removeMealItem = useCallback(async (mealId: string, itemId: string) => {
+    locallyDeletedRef.current.add(itemId);
     // Atualização otimista
     setState(s => ({ ...s, meals: s.meals.map(m => m.id === mealId ? { ...m, items: (m.items || []).filter(i => i.id !== itemId) } : m) }));
     try {
@@ -487,6 +530,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const removeMeal = useCallback(async (mealId: string) => {
     if (!user) return;
+    locallyDeletedRef.current.add(mealId);
     // Atualização otimista
     setState(s => ({ ...s, meals: s.meals.filter(m => m.id !== mealId) }));
     try {
@@ -707,6 +751,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (error) throw error;
         if (data) {
           const newItem: MealItem = { ...data, food: data.food as unknown as Food } as MealItem;
+          locallyCreatedRef.current.add(newItem.id);
           setState(s => ({ ...s, meals: s.meals.map(m => m.id === mealId ? { ...m, items: [...(m.items || []), newItem] } : m) }));
         }
         await addRecentFood(item.food_id, item.quantidade);
