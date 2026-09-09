@@ -15,7 +15,7 @@ export default function GoalsPage() {
   const readOnlyClass = "w-full border-b border-muted-foreground/30 py-2.5 text-sm font-body text-muted-foreground";
   const labelClass = "label-caps mb-1 block";
   const toggleClass = (active: boolean) =>
-    `flex-1 py-3 px-2 font-heading text-xs uppercase tracking-widest transition-colors duration-200 ${active ? 'toggle-active' : 'toggle-inactive'}`;
+    `pressable flex-1 py-3 px-2 font-heading text-xs uppercase tracking-widest transition-colors duration-200 ${active ? 'toggle-active' : 'toggle-inactive'}`;
 
   // Warnings
   const getAjusteWarning = () => {
@@ -84,7 +84,7 @@ export default function GoalsPage() {
               <div className="space-y-2">
                 <button
                   type="button"
-                  className={`w-full border p-4 text-left transition-colors ${
+                  className={`pressable w-full border p-4 text-left transition-colors ${
                     profile.tmb_metodo === 'mifflin' ? 'border-primary bg-primary/10' : 'border-muted-foreground/30 hover:bg-secondary'
                   }`}
                   onClick={() => setProfile({ tmb_metodo: 'mifflin' })}
@@ -94,7 +94,7 @@ export default function GoalsPage() {
                 </button>
                 <button
                   type="button"
-                  className={`w-full border p-4 text-left transition-colors ${
+                  className={`pressable w-full border p-4 text-left transition-colors ${
                     profile.tmb_metodo === 'katch' ? 'border-primary bg-primary/10' : 'border-muted-foreground/30 hover:bg-secondary'
                   } ${!meta.tmb_katch ? 'opacity-50' : ''}`}
                   onClick={() => meta.tmb_katch && setProfile({ tmb_metodo: 'katch' })}
@@ -157,7 +157,7 @@ export default function GoalsPage() {
             <button
               type="button"
               aria-label="Diminuir 50 kcal"
-              className="flex h-11 w-11 shrink-0 items-center justify-center border border-muted-foreground/40 text-foreground hover:bg-secondary transition-colors"
+              className="pressable flex h-11 w-11 shrink-0 items-center justify-center border border-muted-foreground/40 text-foreground hover:bg-secondary transition-colors"
               onClick={() => {
                 const abs = Math.max(0, Math.abs(profile.ajuste_calorico) - 50);
                 const sign = profile.ajuste_calorico <= 0 ? -1 : 1;
@@ -184,7 +184,7 @@ export default function GoalsPage() {
             <button
               type="button"
               aria-label="Aumentar 50 kcal"
-              className="flex h-11 w-11 shrink-0 items-center justify-center border border-muted-foreground/40 text-foreground hover:bg-secondary transition-colors"
+              className="pressable flex h-11 w-11 shrink-0 items-center justify-center border border-muted-foreground/40 text-foreground hover:bg-secondary transition-colors"
               onClick={() => {
                 const abs = Math.abs(profile.ajuste_calorico) + 50;
                 const sign = profile.ajuste_calorico <= 0 ? -1 : 1;

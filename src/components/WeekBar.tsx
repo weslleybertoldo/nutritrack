@@ -39,19 +39,21 @@ export default function WeekBar({ selectedDate, onSelectDate }: WeekBarProps) {
             key={dateStr}
             type="button"
             onClick={() => onSelectDate(dateStr)}
-            className={`flex flex-1 flex-col items-center gap-0.5 py-2 transition-colors ${
+            aria-pressed={isSelected}
+            aria-label={`${dayLabel} ${dayNum}${isToday ? ' (hoje)' : ''}`}
+            className={`pressable flex flex-1 flex-col items-center gap-0.5 py-2 duration-200 ${
               isSelected
                 ? 'bg-primary text-primary-foreground'
-                : 'text-muted-foreground hover:bg-secondary'
+                : 'text-muted-foreground hover:bg-secondary active:bg-secondary'
             }`}
           >
             <span className="font-heading text-[10px] uppercase tracking-wider">
               {dayLabel}
             </span>
-            <span className={`text-base font-heading ${isSelected ? 'text-primary-foreground' : 'text-foreground'}`}>
+            <span className={`text-base font-heading transition-colors duration-200 ${isSelected ? 'text-primary-foreground' : 'text-foreground'}`}>
               {dayNum}
             </span>
-            <span className={`w-1 h-1 ${isToday ? (isSelected ? 'bg-primary-foreground' : 'bg-primary') : ''}`} />
+            <span className={`w-1 h-1 transition-colors duration-200 ${isToday ? (isSelected ? 'bg-primary-foreground' : 'bg-primary') : 'bg-transparent'}`} />
           </button>
         );
       })}

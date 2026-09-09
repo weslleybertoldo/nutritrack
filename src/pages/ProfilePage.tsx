@@ -4,6 +4,7 @@ import { useApp } from '@/context/AppContext';
 import { calcularIdade, calcularPercentualGordura3Dobras, calcularComposicaoCorporal } from '@/lib/calculations';
 import { Sexo } from '@/types';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Settings, RefreshCw, Check, Download, X } from 'lucide-react';
 import UpdateChecker, { CURRENT_VERSION } from '@/components/UpdateChecker';
 import UpdateDownloadButton from '@/components/UpdateDownloadButton';
@@ -145,7 +146,7 @@ export default function ProfilePage() {
                   <button
                     key={s}
                     type="button"
-                    className={`flex-1 py-3 px-6 font-heading text-sm uppercase tracking-widest transition-colors duration-200 ${
+                    className={`pressable flex-1 py-3 px-6 font-heading text-sm uppercase tracking-widest transition-colors duration-200 ${
                       profile.sexo === s ? 'toggle-active' : 'toggle-inactive'
                     }`}
                     onClick={() => setProfile({ sexo: s })}
@@ -267,52 +268,48 @@ export default function ProfilePage() {
           <button
             type="button"
             onClick={() => { setShowSettings(true); setUpdateResult(null); }}
-            className="absolute bottom-4 right-0 p-2 text-muted-foreground/30 hover:text-muted-foreground transition-colors"
+            className="pressable-sm absolute bottom-4 right-0 p-2 text-muted-foreground/30 hover:text-muted-foreground transition-colors"
           >
             <Settings size={16} />
           </button>
         </footer>
 
-        {/* Modal de configurações */}
-        {showSettings && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70" onClick={() => setShowSettings(false)}>
-            <div className="bg-card border border-muted-foreground/30 p-6 mx-4 max-w-sm w-full space-y-4" onClick={e => e.stopPropagation()}>
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm tracking-wider">Configurações</h3>
-                <button type="button" onClick={() => setShowSettings(false)} className="text-muted-foreground hover:text-foreground transition-colors">
-                  <X size={18} />
-                </button>
-              </div>
+        {/* Modal de configurações — Dialog Radix: abre e fecha animado */}
+        <Dialog open={showSettings} onOpenChange={setShowSettings}>
+          <DialogContent className="w-[calc(100%-2rem)] max-w-sm rounded-none border-muted-foreground/30 bg-card p-6">
+            <DialogHeader className="text-left">
+              <DialogTitle className="text-sm tracking-wider">Configurações</DialogTitle>
+              <DialogDescription className="sr-only">Versão do aplicativo e verificação de atualizações</DialogDescription>
+            </DialogHeader>
 
-              <div className="text-center space-y-3">
-                <p className="text-[10px] text-muted-foreground/50">Versão atual: v{CURRENT_VERSION}</p>
+            <div className="text-center space-y-3">
+              <p className="text-[10px] text-muted-foreground/50">Versão atual: v{CURRENT_VERSION}</p>
 
-                <button
-                  type="button"
-                  onClick={handleCheckUpdate}
-                  disabled={checkingUpdate}
-                  className="flex items-center justify-center gap-2 mx-auto px-4 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:text-primary border border-border rounded-lg transition-colors"
-                >
-                  <RefreshCw size={12} className={checkingUpdate ? "animate-spin" : ""} />
-                  Verificar atualizações
-                </button>
+              <button
+                type="button"
+                onClick={handleCheckUpdate}
+                disabled={checkingUpdate}
+                className="pressable flex items-center justify-center gap-2 mx-auto px-4 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:text-primary border border-border rounded-lg transition-colors disabled:opacity-60"
+              >
+                <RefreshCw size={12} className={checkingUpdate ? "animate-spin text-primary" : ""} />
+                {checkingUpdate ? 'Verificando…' : 'Verificar atualizações'}
+              </button>
 
-                {updateResult && (
-                  <div className="mt-2">
-                    {updateResult.hasUpdate ? (
-                      <UpdateDownloadButton url={updateResult.url!} version={updateResult.version!} size="md" />
-                    ) : (
-                      <p className="text-xs text-success flex items-center justify-center gap-1">
-                        <Check size={12} />
-                        Você está usando a versão mais recente
-                      </p>
-                    )}
-                  </div>
-                )}
-              </div>
+              {updateResult && (
+                <div className="mt-2 fade-enter">
+                  {updateResult.hasUpdate ? (
+                    <UpdateDownloadButton url={updateResult.url!} version={updateResult.version!} size="md" />
+                  ) : (
+                    <p className="text-xs text-success flex items-center justify-center gap-1">
+                      <Check size={12} />
+                      Você está usando a versão mais recente
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
-          </div>
-        )}
+          </DialogContent>
+        </Dialog>
 
         <UpdateChecker />
       </div>

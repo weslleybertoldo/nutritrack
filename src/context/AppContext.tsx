@@ -732,34 +732,82 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, [user]);
 
+  // Adiciona todos os itens da receita em UMA requisição, com estado otimista.
+  // Antes: 1 insert + 1 upsert de recentes POR item, em série (receita de 4
+  // alimentos = 8–12 round trips → "demora pra adicionar").
   const addRecipeToMeal = useCallback(async (recipe: Recipe, mealId: string) => {
-    if (!recipe.items || recipe.items.length === 0) return;
-    for (const item of recipe.items) {
-      if (!item.food) continue;
+    const itens = (recipe.items || []).filter(i => i.food);
+    if (itens.length === 0) return;
+
+    const rows = itens.map(item => {
+      const food = item.food as Food;
       const factor = item.quantidade / 100;
-      const insertData = {
-        meal_id: mealId,
-        food_id: item.food_id,
-        quantidade: item.quantidade,
-        calorias_calculadas: item.food.calorias_por_100 * factor,
-        proteina: item.food.proteina_por_100 * factor,
-        carbo: item.food.carbo_por_100 * factor,
-        gordura: item.food.gordura_por_100 * factor,
+      return {
+        tempId: crypto.randomUUID(),
+        food,
+        payload: {
+          meal_id: mealId,
+          food_id: item.food_id,
+          quantidade: item.quantidade,
+          calorias_calculadas: food.calorias_por_100 * factor,
+          proteina: food.proteina_por_100 * factor,
+          carbo: food.carbo_por_100 * factor,
+          gordura: food.gordura_por_100 * factor,
+        },
       };
+    });
+
+    // Otimista: os itens aparecem na refeição imediatamente.
+    rows.forEach(r => locallyCreatedRef.current.add(r.tempId));
+    const optimistic = rows.map(r => ({ ...r.payload, id: r.tempId, food: r.food } as MealItem));
+    setState(s => ({
+      ...s,
+      meals: s.meals.map(m => m.id === mealId ? { ...m, items: [...(m.items || []), ...optimistic] } : m),
+    }));
+
+    // Recentes: 1 upsert em lote, em background (não segura a tela).
+    const atualizarRecentes = async () => {
+      if (!user) return;
       try {
-        const { data, error } = await supabase.from('meal_items').insert(insertData).select('*, food:foods(*)').single();
+        const porAlimento = new Map<string, number>();
+        rows.forEach(r => porAlimento.set(r.payload.food_id, r.payload.quantidade));
+        const base = Date.now();
+        const recentRows = [...porAlimento.entries()].map(([food_id, quantidade], i) => ({
+          user_id: user.id, food_id, quantidade, usado_em: new Date(base + i).toISOString(),
+        }));
+        const { error } = await supabase
+          .from('recent_foods')
+          .upsert(recentRows as any, { onConflict: 'user_id,food_id' });
         if (error) throw error;
-        if (data) {
-          const newItem: MealItem = { ...data, food: data.food as unknown as Food } as MealItem;
-          locallyCreatedRef.current.add(newItem.id);
-          setState(s => ({ ...s, meals: s.meals.map(m => m.id === mealId ? { ...m, items: [...(m.items || []), newItem] } : m) }));
-        }
-        await addRecentFood(item.food_id, item.quantidade);
+        await refreshRecentFoods();
       } catch (err: any) {
-        toast.error(`Erro ao adicionar ${item.food.nome} da receita`);
+        console.warn('Erro ao atualizar recentes da receita:', err?.message);
       }
+    };
+
+    try {
+      const { data, error } = await supabase
+        .from('meal_items')
+        .insert(rows.map(r => r.payload))
+        .select('*, food:foods(*)');
+      if (error) throw error;
+      const reais = ((data || []) as any[]).map(d => ({ ...d, food: d.food as unknown as Food }) as MealItem);
+      reais.forEach(i => locallyCreatedRef.current.add(i.id));
+      const tempIds = new Set<string>(rows.map(r => r.tempId));
+      // Troca os otimistas pelos reais.
+      setState(s => ({
+        ...s,
+        meals: s.meals.map(m => m.id === mealId
+          ? { ...m, items: [...(m.items || []).filter(i => !tempIds.has(i.id)), ...reais] }
+          : m),
+      }));
+    } catch (err: any) {
+      // Offline/erro: mantém os otimistas na tela e enfileira pro sync.
+      console.warn('[AppContext] Receita enfileirada pro sync:', err?.message);
+      rows.forEach(r => addPendingOperation('meal_items', 'upsert', { ...r.payload, id: r.tempId }, 'id'));
     }
-  }, [addRecentFood, user]);
+    void atualizarRecentes();
+  }, [user, refreshRecentFoods]);
 
   // ── DERIVED STATE ─────────────────────────────────────────────────────────
   const getMealsForDate = useCallback((date: string) => state.meals.filter(m => m.data === date), [state.meals]);
