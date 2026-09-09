@@ -4,6 +4,9 @@ import { Capacitor } from '@capacitor/core';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/context/AuthContext';
 import { toast } from 'sonner';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Spinner } from '@/components/ui/spinner';
 import {
   getReminder,
   setReminder,
@@ -111,18 +114,27 @@ export default function HabitosCard({ selectedDate }: HabitosCardProps) {
       console.warn('[HabitosCard] Falha ao reconciliar lembretes:', e));
   }, [habitos]);
 
+  // Marcar/desmarcar é OTIMISTA: o chip muda na hora do toque; a rede vai
+  // depois e, se falhar, volta atrás com aviso. Antes o toque esperava a
+  // resposta do servidor (300–800ms no celular) e parecia "travado".
   const handleToggle = async (habitoId: string) => {
     if (!user) return;
     const habito = habitos.find(h => h.id === habitoId);
     const jaConcluido = concluidos.has(habitoId);
+    const aplicar = (marcado: boolean) => setConcluidos(prev => {
+      const s = new Set(prev);
+      if (marcado) s.add(habitoId); else s.delete(habitoId);
+      return s;
+    });
+    aplicar(!jaConcluido);
+
     if (jaConcluido) {
       const { error } = await supabase.from('habitos_registro')
         .delete()
         .eq('user_id', user.id)
         .eq('habito_id', habitoId)
         .eq('data', selectedDate);
-      if (error) { console.warn('Erro ao desmarcar hábito:', error.message); toast.error('Erro ao desmarcar hábito'); return; }
-      setConcluidos(prev => { const s = new Set(prev); s.delete(habitoId); return s; });
+      if (error) { console.warn('Erro ao desmarcar hábito:', error.message); aplicar(true); toast.error('Erro ao desmarcar hábito'); return; }
 
       // Voltou a ficar pendente → se tem lembrete ativo, reagenda (o completar
       // havia cancelado a de hoje e jogado pra amanhã). Sem isto, marcar+desmarcar
@@ -134,8 +146,8 @@ export default function HabitosCard({ selectedDate }: HabitosCardProps) {
     } else {
       const { error } = await supabase.from('habitos_registro')
         .insert({ user_id: user.id, habito_id: habitoId, data: selectedDate });
-      if (error) { console.warn('Erro ao marcar hábito:', error.message); toast.error('Erro ao marcar hábito'); return; }
-      setConcluidos(prev => new Set([...prev, habitoId]));
+      // 23505 = já estava marcado (outro aparelho): mantém marcado.
+      if (error && error.code !== '23505') { console.warn('Erro ao marcar hábito:', error.message); aplicar(false); toast.error('Erro ao marcar hábito'); return; }
 
       // Hábito concluído → cancela notificação de hoje e reagenda para amanhã
       if (habito) {
@@ -147,10 +159,12 @@ export default function HabitosCard({ selectedDate }: HabitosCardProps) {
   // Trava reentrância: o add é disparado por Enter e pelo botão; sem esta trava
   // dois gatilhos rápidos inseriam o mesmo nome duas vezes.
   const addingRef = useRef(false);
+  const [salvandoNovo, setSalvandoNovo] = useState(false);
   const handleAddHabito = async () => {
     const nome = novoNome.trim();
     if (!nome || !user || addingRef.current) return;
     addingRef.current = true;
+    setSalvandoNovo(true);
     try {
       const maxOrdem = habitos.length > 0 ? Math.max(...habitos.map(h => h.ordem)) + 1 : 0;
       const { data, error } = await supabase.from('habitos')
@@ -173,28 +187,46 @@ export default function HabitosCard({ selectedDate }: HabitosCardProps) {
       }
     } finally {
       addingRef.current = false;
+      setSalvandoNovo(false);
     }
   };
 
   const handleRenomear = async (id: string) => {
     if (!editandoNome.trim()) return;
-    const { error } = await supabase.from('habitos').update({ nome: editandoNome.trim() }).eq('id', id);
-    if (error) { console.warn('Erro ao renomear hábito:', error.message); toast.error('Erro ao renomear hábito'); return; }
-    setHabitos(prev => prev.map(h => h.id === id ? { ...h, nome: editandoNome.trim() } : h));
+    const novo = editandoNome.trim();
+    const anterior = habitos.find(h => h.id === id)?.nome;
+    // Otimista: renomeia na tela e fecha o campo na hora.
+    setHabitos(prev => prev.map(h => h.id === id ? { ...h, nome: novo } : h));
     setEditandoId(null);
+    const { error } = await supabase.from('habitos').update({ nome: novo }).eq('id', id);
+    if (error) {
+      console.warn('Erro ao renomear hábito:', error.message);
+      if (anterior) setHabitos(prev => prev.map(h => h.id === id ? { ...h, nome: anterior } : h));
+      toast.error('Erro ao renomear hábito');
+      return;
+    }
 
     // Se tem lembrete ativo, reagenda com novo nome
     const reminder = getReminder(id);
     if (reminder.ativo) {
-      scheduleHabitNotification(id, editandoNome.trim(), reminder.hora, reminder.minuto);
+      scheduleHabitNotification(id, novo, reminder.hora, reminder.minuto);
     }
   };
 
   const handleExcluir = async (id: string) => {
-    const { error } = await supabase.from('habitos').update({ ativo: false }).eq('id', id);
-    if (error) { console.warn('Erro ao excluir hábito:', error.message); toast.error('Erro ao excluir hábito'); return; }
+    const removido = habitos.find(h => h.id === id);
+    const estavaConcluido = concluidos.has(id);
+    // Otimista: some da tela na hora.
     setHabitos(prev => prev.filter(h => h.id !== id));
     setConcluidos(prev => { const s = new Set(prev); s.delete(id); return s; });
+    const { error } = await supabase.from('habitos').update({ ativo: false }).eq('id', id);
+    if (error) {
+      console.warn('Erro ao excluir hábito:', error.message);
+      if (removido) setHabitos(prev => [...prev, removido].sort((a, b) => a.ordem - b.ordem));
+      if (estavaConcluido) setConcluidos(prev => new Set([...prev, id]));
+      toast.error('Erro ao excluir hábito');
+      return;
+    }
 
     // Remove lembrete e cancela notificação
     removeReminder(id);
@@ -236,16 +268,31 @@ export default function HabitosCard({ selectedDate }: HabitosCardProps) {
     toast.success(`Lembrete de "${habito?.nome}" desativado`);
   };
 
-  if (loading) return null;
+  // Esqueleto com o mesmo tamanho do card: nada pula quando os hábitos chegam.
+  if (loading) {
+    return (
+      <div className="rounded-lg border border-border bg-card mb-3" aria-busy="true">
+        <div className="flex items-center justify-between px-4 py-3">
+          <span className="font-heading font-semibold text-sm">Hábitos diários</span>
+          <Spinner size={14} label="Carregando hábitos" />
+        </div>
+        <div className="px-4 pb-3 flex flex-wrap gap-2">
+          <Skeleton className="h-8 w-24 rounded-none" />
+          <Skeleton className="h-8 w-20 rounded-none" />
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="rounded-lg border border-border bg-card mb-3">
+    <div className="rounded-lg border border-border bg-card mb-3 fade-enter">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3">
         <span className="font-heading font-semibold text-sm">Hábitos diários</span>
         <button
+          type="button"
           onClick={() => setEditando(e => !e)}
-          className="text-xs text-muted-foreground hover:text-foreground transition-colors font-heading"
+          className="pressable text-xs text-muted-foreground hover:text-foreground font-heading px-1"
         >
           {editando ? 'Fechar' : 'Editar'}
         </button>
@@ -259,7 +306,7 @@ export default function HabitosCard({ selectedDate }: HabitosCardProps) {
           return (
             <div key={h.id} className="flex items-center gap-1">
               {editando && editandoId === h.id ? (
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1 fade-enter">
                   <input
                     autoFocus
                     value={editandoNome}
@@ -267,13 +314,15 @@ export default function HabitosCard({ selectedDate }: HabitosCardProps) {
                     onKeyDown={e => { if (e.key === 'Enter') handleRenomear(h.id); if (e.key === 'Escape') setEditandoId(null); }}
                     className="w-24 bg-transparent border-b border-primary text-sm font-body outline-none py-0.5"
                   />
-                  <button onClick={() => handleRenomear(h.id)} className="text-primary"><Check size={12} /></button>
-                  <button onClick={() => setEditandoId(null)} className="text-muted-foreground"><X size={12} /></button>
+                  <button type="button" onClick={() => handleRenomear(h.id)} aria-label="Salvar nome" className="pressable-sm text-primary"><Check size={12} /></button>
+                  <button type="button" onClick={() => setEditandoId(null)} aria-label="Cancelar" className="pressable-sm text-muted-foreground"><X size={12} /></button>
                 </div>
               ) : (
                 <button
+                  type="button"
                   onClick={() => !editando && handleToggle(h.id)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-none text-xs font-heading uppercase tracking-wider transition-all ${
+                  aria-pressed={feito}
+                  className={`pressable flex items-center gap-1.5 px-3 py-1.5 rounded-none text-xs font-heading uppercase tracking-wider ${
                     feito
                       ? 'bg-primary text-primary-foreground'
                       : 'border border-border text-foreground hover:border-primary hover:text-primary'
@@ -287,64 +336,76 @@ export default function HabitosCard({ selectedDate }: HabitosCardProps) {
                 </button>
               )}
               {editando && editandoId !== h.id && (
-                <div className="flex gap-0.5">
-                  <button
-                    onClick={() => handleAbrirLembrete(h.id)}
-                    className={`p-1 transition-colors ${
-                      reminder.ativo
-                        ? 'text-primary hover:text-primary/80'
-                        : 'text-muted-foreground hover:text-primary'
-                    }`}
-                    title={reminder.ativo ? `Lembrete: ${String(reminder.hora).padStart(2, '0')}:${String(reminder.minuto).padStart(2, '0')}` : 'Configurar lembrete'}
+                <div className="flex gap-0.5 fade-enter">
+                  <Popover
+                    open={configurandoLembreteId === h.id}
+                    onOpenChange={(o) => { if (!o) setConfigurandoLembreteId(null); }}
                   >
-                    {reminder.ativo ? <Bell size={11} /> : <BellOff size={11} />}
-                  </button>
+                    <PopoverTrigger asChild>
+                      <button
+                        type="button"
+                        onClick={() => handleAbrirLembrete(h.id)}
+                        className={`pressable-sm p-1 ${
+                          reminder.ativo
+                            ? 'text-primary hover:text-primary/80'
+                            : 'text-muted-foreground hover:text-primary'
+                        }`}
+                        title={reminder.ativo ? `Lembrete: ${String(reminder.hora).padStart(2, '0')}:${String(reminder.minuto).padStart(2, '0')}` : 'Configurar lembrete'}
+                        aria-label="Lembrete"
+                      >
+                        {reminder.ativo ? <Bell size={11} /> : <BellOff size={11} />}
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent align="start" sideOffset={6} className="z-[150] w-60 space-y-2 rounded-lg border-border bg-card p-3 shadow-lg">
+                      <p className="text-xs font-heading text-foreground">Lembrete para "{h.nome}"</p>
+                      <input
+                        type="time"
+                        value={lembreteHora}
+                        onChange={e => setLembreteHora(e.target.value)}
+                        className="w-full rounded-lg border border-input bg-background px-3 py-1.5 text-sm font-body focus:outline-none focus:ring-2 focus:ring-ring"
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleSalvarLembrete(h.id)}
+                          className="pressable flex-1 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-heading"
+                        >
+                          Salvar
+                        </button>
+                        {getReminder(h.id).ativo && (
+                          <button
+                            type="button"
+                            onClick={() => handleDesativarLembrete(h.id)}
+                            className="pressable py-1.5 px-3 border border-destructive/30 text-destructive rounded-lg text-xs font-heading"
+                          >
+                            Desativar
+                          </button>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setConfigurandoLembreteId(null)}
+                        className="pressable w-full text-center text-xs text-muted-foreground hover:text-foreground py-0.5"
+                      >
+                        Cancelar
+                      </button>
+                    </PopoverContent>
+                  </Popover>
                   <button
+                    type="button"
                     onClick={() => { setEditandoId(h.id); setEditandoNome(h.nome); }}
-                    className="p-1 text-muted-foreground hover:text-primary transition-colors"
+                    aria-label="Renomear"
+                    className="pressable-sm p-1 text-muted-foreground hover:text-primary"
                   >
                     <Pencil size={11} />
                   </button>
                   <button
+                    type="button"
                     onClick={() => handleExcluir(h.id)}
-                    className="p-1 text-muted-foreground hover:text-destructive transition-colors"
+                    aria-label="Excluir hábito"
+                    className="pressable-sm p-1 text-muted-foreground hover:text-destructive"
                   >
                     <Trash2 size={11} />
-                  </button>
-                </div>
-              )}
-
-              {/* Popup de configuração de lembrete */}
-              {configurandoLembreteId === h.id && (
-                <div className="absolute z-50 mt-1 p-3 rounded-lg border border-border bg-card shadow-lg space-y-2" style={{ minWidth: '200px' }}>
-                  <p className="text-xs font-heading text-foreground">Lembrete para "{h.nome}"</p>
-                  <input
-                    type="time"
-                    value={lembreteHora}
-                    onChange={e => setLembreteHora(e.target.value)}
-                    className="w-full rounded-lg border border-input bg-background px-3 py-1.5 text-sm font-body focus:outline-none focus:ring-2 focus:ring-ring"
-                  />
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => handleSalvarLembrete(h.id)}
-                      className="flex-1 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-heading"
-                    >
-                      Salvar
-                    </button>
-                    {getReminder(h.id).ativo && (
-                      <button
-                        onClick={() => handleDesativarLembrete(h.id)}
-                        className="py-1.5 px-3 border border-destructive/30 text-destructive rounded-lg text-xs font-heading"
-                      >
-                        Desativar
-                      </button>
-                    )}
-                  </div>
-                  <button
-                    onClick={() => setConfigurandoLembreteId(null)}
-                    className="w-full text-center text-xs text-muted-foreground hover:text-foreground"
-                  >
-                    Cancelar
                   </button>
                 </div>
               )}
@@ -354,7 +415,7 @@ export default function HabitosCard({ selectedDate }: HabitosCardProps) {
 
         {/* Adicionar novo */}
         {adicionando ? (
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 fade-enter">
             <input
               autoFocus
               value={novoNome}
@@ -368,20 +429,24 @@ export default function HabitosCard({ selectedDate }: HabitosCardProps) {
               className="w-28 bg-transparent border-b border-muted-foreground text-sm font-body outline-none py-0.5 focus:border-primary"
             />
             <button
+              type="button"
               onClick={() => { handleAddHabito(); setAdicionando(false); }}
-              disabled={!novoNome.trim()}
-              className="p-1 text-primary disabled:opacity-40 transition-colors"
+              disabled={!novoNome.trim() || salvandoNovo}
+              aria-label="Adicionar hábito"
+              className="pressable-sm p-1 text-primary disabled:opacity-40"
             >
-              <Check size={12} />
+              {salvandoNovo ? <Spinner size={12} /> : <Check size={12} />}
             </button>
           </div>
         ) : (
           <button
+            type="button"
             onClick={() => setAdicionando(true)}
-            className="p-1 text-muted-foreground hover:text-primary transition-colors"
+            className="pressable-sm p-1 text-muted-foreground hover:text-primary"
             title="Adicionar hábito"
+            aria-label="Adicionar hábito"
           >
-            <Plus size={14} />
+            {salvandoNovo ? <Spinner size={14} /> : <Plus size={14} />}
           </button>
         )}
       </div>

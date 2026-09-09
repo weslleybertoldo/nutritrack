@@ -64,7 +64,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center px-5 relative">
+    <div className="min-h-screen bg-background flex items-center justify-center px-5 relative fade-enter">
       <div className="w-full max-w-sm space-y-8">
         <div className="text-center">
           <h1 className="text-3xl sm:text-4xl text-foreground tracking-tight">
@@ -79,7 +79,7 @@ export default function LoginPage() {
           type="button"
           onClick={handleGoogleLogin}
           disabled={loading}
-          className="w-full h-12 border border-muted-foreground/30 text-foreground font-body text-sm flex items-center justify-center gap-3 hover:bg-secondary transition-colors duration-200 disabled:opacity-50"
+          className="pressable w-full h-12 border border-muted-foreground/30 text-foreground font-body text-sm flex items-center justify-center gap-3 hover:bg-secondary transition-colors duration-200 disabled:opacity-50"
         >
           <svg className="h-5 w-5" viewBox="0 0 24 24">
             <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
@@ -135,7 +135,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full h-12 bg-primary text-primary-foreground font-heading text-sm uppercase tracking-widest hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="pressable w-full h-12 bg-primary text-primary-foreground font-heading text-sm uppercase tracking-widest hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? 'Aguarde...' : isSignUp ? 'Criar conta' : 'Entrar'}
           </button>

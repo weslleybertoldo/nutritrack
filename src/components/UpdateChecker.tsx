@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { X } from "lucide-react";
 import UpdateDownloadButton from "./UpdateDownloadButton";
+import { useDelayedUnmount } from "@/hooks/useSheet";
 
 const CURRENT_VERSION = __APP_VERSION__;
 // Busca a última release via GitHub API (funciona em repos privados e públicos)
@@ -15,6 +16,9 @@ interface VersionInfo {
 const UpdateChecker = () => {
   const [update, setUpdate] = useState<VersionInfo | null>(null);
   const [dismissed, setDismissed] = useState(false);
+  const visible = !!update && !dismissed;
+  // Fica montado 220ms depois de fechar pra animação de saída rodar.
+  const mounted = useDelayedUnmount(visible, 220);
 
   useEffect(() => {
     const checkUpdate = async () => {
@@ -56,10 +60,16 @@ const UpdateChecker = () => {
     checkUpdate();
   }, []);
 
-  if (!update || dismissed) return null;
+  if (!mounted || !update) return null;
 
   return (
-    <div className="fixed bottom-20 left-4 right-4 z-[110] mx-auto max-w-md">
+    <div
+      className={`fixed bottom-20 left-4 right-4 z-[110] mx-auto max-w-md ${
+        visible
+          ? "animate-in slide-in-from-bottom-4 fade-in-0 duration-300"
+          : "animate-out slide-out-to-bottom-4 fade-out-0 duration-200 fill-mode-forwards"
+      }`}
+    >
       <div className="bg-card border border-primary/50 rounded-none p-4 shadow-lg">
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1">
@@ -73,7 +83,8 @@ const UpdateChecker = () => {
           <button
             type="button"
             onClick={() => setDismissed(true)}
-            className="p-1 text-muted-foreground hover:text-foreground transition-colors"
+            aria-label="Fechar"
+            className="pressable-sm p-1 text-muted-foreground hover:text-foreground transition-colors"
           >
             <X size={16} />
           </button>
