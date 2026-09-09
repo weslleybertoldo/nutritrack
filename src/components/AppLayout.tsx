@@ -1,5 +1,4 @@
 import React, { ReactNode } from 'react';
-import BottomNav from './BottomNav';
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -7,9 +6,14 @@ interface AppLayoutProps {
   headerRight?: ReactNode;
 }
 
+/**
+ * Layout das abas. O BottomNav é renderizado pelo AppShell (App.tsx), fora do
+ * Suspense — assim a barra nunca some na troca de aba. A página entra com
+ * `page-enter` (sobe 8px esmaecendo, 220ms).
+ */
 export default function AppLayout({ children, title, headerRight }: AppLayoutProps) {
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background page-enter">
       {title && (
         <header className="sticky top-0 z-40 border-b border-muted-foreground/30 bg-background/95 backdrop-blur-md">
           <div className="mx-auto max-w-lg px-4 pt-3 pb-2.5 flex items-end justify-between">
@@ -26,7 +30,6 @@ export default function AppLayout({ children, title, headerRight }: AppLayoutPro
       <main className="mx-auto max-w-lg px-4 pb-safe pt-4">
         {children}
       </main>
-      <BottomNav />
     </div>
   );
 }

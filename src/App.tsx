@@ -1,6 +1,6 @@
 import { Suspense, lazy } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Route, Routes, Navigate } from "react-router-dom";
+import { BrowserRouter, Route, Routes, Navigate, Outlet } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -9,14 +9,23 @@ import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { useOfflineSync } from "@/hooks/useOfflineSync";
 import { useAppLifecycle } from "@/hooks/useAppLifecycle";
+import { usePreloadRoutes } from "@/hooks/usePreloadRoutes";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import InstallBanner from "./components/InstallBanner";
+import BottomNav from "./components/BottomNav";
+import PageSkeleton from "./components/PageSkeleton";
 import { setupDeepLinkListener } from "@/lib/capacitorAuth";
 
-const DiaryPage = lazy(() => import("./pages/DiaryPage"));
-const ProfilePage = lazy(() => import("./pages/ProfilePage"));
-const GoalsPage = lazy(() => import("./pages/GoalsPage"));
-const SettingsPage = lazy(() => import("./pages/SettingsPage"));
+// Fábricas separadas: o mesmo `import()` serve pro lazy() e pro preload.
+const loadDiary = () => import("./pages/DiaryPage");
+const loadProfile = () => import("./pages/ProfilePage");
+const loadGoals = () => import("./pages/GoalsPage");
+const loadSettings = () => import("./pages/SettingsPage");
+
+const DiaryPage = lazy(loadDiary);
+const ProfilePage = lazy(loadProfile);
+const GoalsPage = lazy(loadGoals);
+const SettingsPage = lazy(loadSettings);
 const LoginPage = lazy(() => import("./pages/LoginPage"));
 const AdminPage = lazy(() => import("./pages/AdminPage"));
 const NotFound = lazy(() => import("./pages/NotFound"));
@@ -41,20 +50,40 @@ const queryClient = new QueryClient({
   },
 });
 
+/** Só no boot frio / login / admin — as abas usam o PageSkeleton (nav continua na tela). */
+function Splash({ label }: { label?: string }) {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-background fade-enter">
+      <div className="text-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto mb-2" />
+        {label && <p className="text-sm text-muted-foreground font-body">{label}</p>}
+      </div>
+    </div>
+  );
+}
+
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="text-center">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto mb-2" />
-          <p className="text-sm text-muted-foreground font-body">Carregando...</p>
-        </div>
-      </div>
-    );
-  }
+  if (loading) return <Splash label="Carregando..." />;
   if (!user) return <Navigate to="/login" replace />;
   return <>{children}</>;
+}
+
+/**
+ * Shell das abas: o BottomNav fica FORA do Suspense, então nunca some ao
+ * trocar de aba; o conteúdo carrega no lugar (skeleton) e as outras rotas são
+ * pré-carregadas em idle — troca de aba sem esperar chunk.
+ */
+function AppShell() {
+  usePreloadRoutes([loadGoals, loadSettings, loadProfile]);
+  return (
+    <>
+      <Suspense fallback={<PageSkeleton />}>
+        <Outlet />
+      </Suspense>
+      <BottomNav />
+    </>
+  );
 }
 
 function AppRoutes() {
@@ -64,30 +93,23 @@ function AppRoutes() {
   // Capacitor: refresh sessão + re-sync ao voltar do background
   useAppLifecycle(triggerSync);
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-      </div>
-    );
-  }
+  if (loading) return <Splash />;
 
   return (
-    <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-      </div>
-    }>
-      <Routes>
-        <Route path="/login" element={user ? <Navigate to="/" replace /> : <LoginPage />} />
-        <Route path="/admin" element={<AdminPage />} />
-        <Route path="/" element={<ProtectedRoute><DiaryPage /></ProtectedRoute>} />
-        <Route path="/perfil" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
-        <Route path="/metas" element={<ProtectedRoute><GoalsPage /></ProtectedRoute>} />
-        <Route path="/configuracoes" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
-        <Route path="*" element={<NotFound />} />
-      </Routes>
-    </Suspense>
+    <Routes>
+      <Route
+        path="/login"
+        element={user ? <Navigate to="/" replace /> : <Suspense fallback={<Splash />}><LoginPage /></Suspense>}
+      />
+      <Route path="/admin" element={<Suspense fallback={<Splash />}><AdminPage /></Suspense>} />
+      <Route element={<ProtectedRoute><AppShell /></ProtectedRoute>}>
+        <Route path="/" element={<DiaryPage />} />
+        <Route path="/perfil" element={<ProfilePage />} />
+        <Route path="/metas" element={<GoalsPage />} />
+        <Route path="/configuracoes" element={<SettingsPage />} />
+      </Route>
+      <Route path="*" element={<Suspense fallback={<Splash />}><NotFound /></Suspense>} />
+    </Routes>
   );
 }
 

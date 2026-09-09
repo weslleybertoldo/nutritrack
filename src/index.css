@@ -141,6 +141,9 @@
   position: fixed;
   inset: 0;
   z-index: 9999;
+  /* Dentro de um Dialog Radix o body fica pointer-events:none; o scanner (que
+     abre por cima da folha) precisa reabilitar. */
+  pointer-events: auto;
 }
 
 .modal-backdrop {
@@ -162,3 +165,56 @@
 input[type="date"]::-webkit-calendar-picker-indicator {
   filter: invert(0.8);
 }
+
+/* ── Movimento e resposta ao toque (Skill-wbs-navegacao, modelo MyFinances) ──
+   Regras: tudo que aparece/some anima nos DOIS sentidos (Radix + tailwindcss-animate);
+   toque responde em <100ms (active:); só transform/opacity animam (GPU). */
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    overscroll-behavior-y: contain;
+  }
+  button, [role="button"], a, [role="tab"], summary {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+}
+
+@layer components {
+  /* Cards, linhas e botões crus: encolhe 3% em 150ms ao pressionar. */
+  .pressable {
+    @apply transition-[transform,background-color,color,border-color,opacity] duration-150 ease-out active:scale-[0.97];
+  }
+  /* Ícones e botões pequenos: encolhe mais e esmaece. */
+  .pressable-sm {
+    @apply transition-[transform,color,opacity] duration-150 ease-out active:scale-90 active:opacity-70;
+  }
+  /* Linhas de lista (escala fica estranha em item largo): só cor de fundo. */
+  .pressable-row {
+    @apply transition-colors duration-150 ease-out active:bg-secondary/70;
+  }
+  /* Entrada de página/aba: sobe 8px esmaecendo (220ms). Sem fill-mode: no fim
+     não sobra transform (senão `fixed` dos filhos quebra). */
+  .page-enter {
+    animation: page-enter 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  /* Troca de conteúdo no mesmo lugar (aba interna, dia da semana). */
+  .fade-enter {
+    animation: fade-enter 180ms ease-out;
+  }
+}
+
+@keyframes page-enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes fade-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Sem `prefers-reduced-motion`: Windows com "Efeitos de animação" desligado (e Android
+   com "Remover animações") faz o navegador pedir reduce e o app ficava SEM nenhum
+   deslize no PC — o MyFinances não respeita esse aviso, por isso lá desliza sempre. */
