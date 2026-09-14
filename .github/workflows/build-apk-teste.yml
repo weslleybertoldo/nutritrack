@@ -1,10 +1,14 @@
 name: Build APK de teste
 
 # APK assinado com a MESMA keystore da release, pra testar uma branch no
-# aparelho ANTES do merge (instala por cima da versão em prod). Roda só à mão:
+# aparelho ANTES do merge (instala por cima da versão em prod). Roda a cada push
+# em branch feat/** ou fix/** e também à mão (só funciona depois que este arquivo
+# existir na main):
 #   gh workflow run build-apk-teste.yml --ref <branch>
 # Não cria release nem bumpa versão — o artifact some em 7 dias.
 on:
+  push:
+    branches: ['feat/**', 'fix/**']
   workflow_dispatch:
 
 permissions:
