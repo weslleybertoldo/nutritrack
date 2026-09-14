@@ -17,6 +17,7 @@ import {
   createHabitReminderChannel,
   reconcileHabitNotifications,
 } from '@/lib/habitReminders';
+import { HABITO_CONCLUIDO_EVENT, type HabitoConcluidoDetail } from '@/lib/habitNotificationActions';
 
 interface Habito {
   id: string;
@@ -72,6 +73,18 @@ export default function HabitosCard({ selectedDate }: HabitosCardProps) {
 
   useEffect(() => { loadHabitos(); }, [loadHabitos]);
   useEffect(() => { loadConcluidos(); }, [loadConcluidos]);
+
+  // Hábito marcado fora do card (botão "Sim" da notificação): atualiza o chip
+  // na hora se a data for a que está na tela.
+  useEffect(() => {
+    const onConcluido = (e: Event) => {
+      const { habitoId, data } = (e as CustomEvent<HabitoConcluidoDetail>).detail;
+      if (data !== selectedDate) return;
+      setConcluidos(prev => prev.has(habitoId) ? prev : new Set(prev).add(habitoId));
+    };
+    window.addEventListener(HABITO_CONCLUIDO_EVENT, onConcluido);
+    return () => window.removeEventListener(HABITO_CONCLUIDO_EVENT, onConcluido);
+  }, [selectedDate]);
 
   // Inicializa com creatina se não tiver nenhum.
   // Guard por user.id: roda no máximo 1x por usuário, mesmo que o objeto `user`

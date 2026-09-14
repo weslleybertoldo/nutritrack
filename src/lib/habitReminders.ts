@@ -1,7 +1,32 @@
 import { Capacitor } from '@capacitor/core';
-import { LocalNotifications } from '@capacitor/local-notifications';
+import {
+  LocalNotifications,
+  type ActionPerformed,
+  type LocalNotificationSchema,
+} from '@capacitor/local-notifications';
 
 const REMINDERS_KEY = 'nutritrack_habit_reminders';
+
+// Versão do formato da notificação agendada no SO. Lembretes agendados por uma
+// versão anterior do app (every:'day') sobrevivem ao update e continuam
+// disparando no formato antigo (sem o botão "Sim") até serem reagendados.
+// Subir este número força a reconciliação a reagendar TODOS os lembretes
+// ativos uma vez.
+//   v2 = texto "Já completou "X" hoje?" + botão "Sim" (actionTypeId + extra).
+const REMINDER_SCHEMA_KEY = 'nutritrack_habit_reminders_schema';
+export const REMINDER_SCHEMA_VERSION = '2';
+
+// Tipo de ação registrado no SO: a notificação de hábito ganha o botão "Sim".
+export const HABIT_ACTION_TYPE_ID = 'HABIT_REMINDER';
+export const HABIT_DONE_ACTION_ID = 'HABIT_DONE';
+export const HABIT_DONE_ACTION_TITLE = 'Sim';
+const HABIT_CHANNEL_ID = 'habit_reminders';
+
+/** Dados guardados na notificação para saber qual hábito marcar ao tocar em "Sim". */
+export interface HabitNotificationExtra {
+  habitoId: string;
+  habitoNome: string;
+}
 
 // Horário padrão: 20:00
 const DEFAULT_HOUR = 20;
@@ -99,6 +124,72 @@ export function notificationId(habitoId: string): number {
 }
 
 /**
+ * Monta a notificação diária de um hábito (mesmo formato no agendamento e no
+ * reagendamento pós-conclusão). `at` = próximo disparo; repete todo dia.
+ */
+export function buildHabitNotification(
+  habitoId: string,
+  habitoNome: string,
+  at: Date,
+): LocalNotificationSchema {
+  const extra: HabitNotificationExtra = { habitoId, habitoNome };
+  return {
+    id: notificationId(habitoId),
+    title: 'Lembrete de Hábito',
+    body: `Já completou "${habitoNome}" hoje?`,
+    schedule: {
+      at,
+      every: 'day',
+      allowWhileIdle: true,
+    },
+    channelId: HABIT_CHANNEL_ID,
+    smallIcon: 'ic_stat_icon_config_sample',
+    autoCancel: true,
+    actionTypeId: HABIT_ACTION_TYPE_ID,
+    extra,
+  };
+}
+
+/**
+ * Interpreta a ação recebida do SO. Devolve o hábito quando o usuário tocou em
+ * "Sim"; `null` para toque no corpo da notificação, outra ação ou payload
+ * sem `habitoId` (notificação de versão antiga).
+ */
+export function parseHabitDoneAction(action: ActionPerformed): HabitNotificationExtra | null {
+  if (action.actionId !== HABIT_DONE_ACTION_ID) return null;
+  const extra = action.notification?.extra as Partial<HabitNotificationExtra> | null | undefined;
+  if (!extra || typeof extra.habitoId !== 'string' || !extra.habitoId) return null;
+  return {
+    habitoId: extra.habitoId,
+    habitoNome: typeof extra.habitoNome === 'string' ? extra.habitoNome : '',
+  };
+}
+
+/** `true` quando os lembretes agendados no SO ainda estão no formato antigo. */
+export function needsReminderUpgrade(storedVersion: string | null): boolean {
+  return storedVersion !== REMINDER_SCHEMA_VERSION;
+}
+
+// Registro do tipo de ação (botão "Sim") — 1x por sessão; o plugin persiste no
+// SO. Precisa existir ANTES de agendar, senão a notificação sai sem botão.
+let actionTypesRegistration: Promise<void> | null = null;
+export function registerHabitActionTypes(): Promise<void> {
+  if (!Capacitor.isNativePlatform()) return Promise.resolve();
+  if (!actionTypesRegistration) {
+    actionTypesRegistration = LocalNotifications.registerActionTypes({
+      types: [{
+        id: HABIT_ACTION_TYPE_ID,
+        actions: [{ id: HABIT_DONE_ACTION_ID, title: HABIT_DONE_ACTION_TITLE }],
+      }],
+    }).catch(e => {
+      console.warn('[HabitReminders] Falha ao registrar ações da notificação:', e);
+      actionTypesRegistration = null; // tenta de novo no próximo agendamento
+    });
+  }
+  return actionTypesRegistration;
+}
+
+/**
  * Agenda notificação diária para um hábito.
  * A notificação só aparece se o hábito NÃO foi concluído (verificação feita no horário).
  * No Capacitor, agendamos a notificação para o horário configurado.
@@ -119,10 +210,13 @@ export async function scheduleHabitNotification(
 
   const id = notificationId(habitoId);
 
+  // Garante o botão "Sim" registrado antes de agendar.
+  await registerHabitActionTypes();
+
   // Cancela notificação anterior deste hábito (se existir)
   try {
     await LocalNotifications.cancel({ notifications: [{ id }] });
-  } catch {}
+  } catch { /* não havia notificação anterior */ }
 
   // Agenda para o próximo horário configurado
   const now = new Date();
@@ -136,19 +230,7 @@ export async function scheduleHabitNotification(
 
   try {
     await LocalNotifications.schedule({
-      notifications: [{
-        id,
-        title: 'Lembrete de Hábito',
-        body: `Você ainda não completou "${habitoNome}" hoje!`,
-        schedule: {
-          at: scheduled,
-          every: 'day',
-          allowWhileIdle: true,
-        },
-        channelId: 'habit_reminders',
-        smallIcon: 'ic_stat_icon_config_sample',
-        autoCancel: true,
-      }],
+      notifications: [buildHabitNotification(habitoId, habitoNome, scheduled)],
     });
     console.log(`[HabitReminders] Scheduled "${habitoNome}" at ${hora}:${String(minuto).padStart(2, '0')} (id: ${id})`);
     return true;
@@ -218,12 +300,19 @@ export async function reconcileHabitNotifications(
     }
   }
 
+  // Formato novo da notificação (ex.: botão "Sim")? Reagenda TODOS os ativos
+  // uma vez — a notificação antiga (every:'day') sobreviveria ao update sem o
+  // botão. Efeito colateral aceito: no dia do update, hábito já concluído antes
+  // do horário volta a lembrar 1x (o "Sim" só reafirma; 23505 = já marcado).
+  const upgrade = needsReminderUpgrade(localStorage.getItem(REMINDER_SCHEMA_KEY));
+
   for (const h of habitos) {
     const r = getReminder(h.id);
-    if (r.ativo && !pending.has(notificationId(h.id))) {
+    if (r.ativo && (upgrade || !pending.has(notificationId(h.id)))) {
       await scheduleHabitNotification(h.id, h.nome, r.hora, r.minuto);
     }
   }
+  if (upgrade) localStorage.setItem(REMINDER_SCHEMA_KEY, REMINDER_SCHEMA_VERSION);
 }
 
 /**
@@ -233,7 +322,7 @@ export async function cancelHabitNotification(habitoId: string) {
   if (!Capacitor.isNativePlatform()) return;
   try {
     await LocalNotifications.cancel({ notifications: [{ id: notificationId(habitoId) }] });
-  } catch {}
+  } catch { /* nada agendado pra cancelar */ }
 }
 
 /**
@@ -243,7 +332,7 @@ export async function createHabitReminderChannel() {
   if (!Capacitor.isNativePlatform()) return;
   try {
     await LocalNotifications.createChannel({
-      id: 'habit_reminders',
+      id: HABIT_CHANNEL_ID,
       name: 'Lembretes de Hábitos',
       description: 'Notificações para lembrar de completar hábitos diários',
       importance: 4, // HIGH
@@ -273,20 +362,11 @@ export async function onHabitCompleted(habitoId: string, habitoNome: string) {
 
   if (!Capacitor.isNativePlatform()) return;
   try {
+    await registerHabitActionTypes();
     await LocalNotifications.schedule({
-      notifications: [{
-        id: notificationId(habitoId),
-        title: 'Lembrete de Hábito',
-        body: `Você ainda não completou "${habitoNome}" hoje!`,
-        schedule: {
-          at: tomorrow,
-          every: 'day',
-          allowWhileIdle: true,
-        },
-        channelId: 'habit_reminders',
-        smallIcon: 'ic_stat_icon_config_sample',
-        autoCancel: true,
-      }],
+      notifications: [buildHabitNotification(habitoId, habitoNome, tomorrow)],
     });
-  } catch {}
+  } catch (e) {
+    console.warn('[HabitReminders] Falha ao reagendar pra amanhã:', e);
+  }
 }
