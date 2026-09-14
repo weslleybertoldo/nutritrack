@@ -9,6 +9,7 @@ import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { useOfflineSync } from "@/hooks/useOfflineSync";
 import { useAppLifecycle } from "@/hooks/useAppLifecycle";
+import { useHabitNotificationActions } from "@/hooks/useHabitNotificationActions";
 import { usePreloadRoutes } from "@/hooks/usePreloadRoutes";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import InstallBanner from "./components/InstallBanner";
@@ -92,6 +93,8 @@ function AppRoutes() {
 
   // Capacitor: refresh sessão + re-sync ao voltar do background
   useAppLifecycle(triggerSync);
+  // Capacitor: botão "Sim" da notificação de hábito marca o hábito de hoje
+  useHabitNotificationActions();
 
   if (loading) return <Splash />;
 
